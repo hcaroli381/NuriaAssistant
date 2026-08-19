@@ -38,3 +38,18 @@ The system operates as an "always-on" smart assistant (similar to an Echo Show) 
 ## Key Files
 - `src/main/java/com/example/nuriaassistant/HelloApplication.java`: Main entry point.
 - `src/main/resources/hello-view.fxml`: Main UI layout.
+
+## Spotify/Media Integration
+- **Approach:** The Raspberry Pi acts as a Spotify Connect device (using `librespot` or `Raspotify`).
+- **UI:** The JavaFX application displays track metadata (title, artist, cover art) by polling the Spotify API/local Spotify Connect status.
+- **Constraint:** Do not attempt full music control or search within the JavaFX UI. Use the Spotify mobile app/PC client as the primary controller.
+
+## Environment Configuration
+
+- **API Keys:** To ensure security, do not hardcode API keys. The application uses environment variables:
+    - `OPENWEATHER_API_KEY`: Required for the weather widget.
+
+To set this up on the Raspberry Pi, add the following to `~/.profile`:
+```bash
+export OPENWEATHER_API_KEY="your_api_key_here"
+```

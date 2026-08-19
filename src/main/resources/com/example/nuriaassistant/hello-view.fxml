@@ -21,4 +21,14 @@
                style="-fx-text-fill: #cccccc; -fx-font-size: 20px;"/>
     </VBox>
 
+    <!-- Notification Area -->
+    <Label fx:id="notificationLabel"
+           text=""
+           style="-fx-text-fill: yellow; -fx-font-size: 32px; -fx-font-weight: bold;"
+           AnchorPane.bottomAnchor="50.0"
+           AnchorPane.leftAnchor="20.0"
+           AnchorPane.rightAnchor="20.0"
+           alignment="CENTER"
+           wrapText="true"/>
+
 </AnchorPane>
