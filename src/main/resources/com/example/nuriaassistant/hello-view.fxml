@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.layout.AnchorPane?>
+<?import javafx.scene.layout.VBox?>
+
+<AnchorPane xmlns:fx="http://javafx.com/fxml"
+            fx:controller="com.example.nuriaassistant.AssistantController"
+            prefWidth="1024.0" prefHeight="600.0"
+            style="-fx-background-color: #000000;">
+
+    <!-- Widget Reloj y Clima -->
+    <VBox fx:id="infoWidget" spacing="5.0"
+          AnchorPane.topAnchor="20.0"
+          AnchorPane.leftAnchor="20.0">
+
+        <Label fx:id="timeLabel"
+               style="-fx-text-fill: white; -fx-font-size: 48px; -fx-font-weight: bold;"/>
+
+        <Label fx:id="weatherLabel"
+               style="-fx-text-fill: #cccccc; -fx-font-size: 20px;"/>
+    </VBox>
+
+</AnchorPane>
