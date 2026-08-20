@@ -1,0 +1,202 @@
+/* ==========================================================================
+   NAVY BLUE MINIMALIST APPLICATION STYLESHEET
+   Clean, modern, high-contrast aesthetic for 1024x600 Touchscreen
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Root Container & Deep Navy Blue Ambient Background
+   -------------------------------------------------------------------------- */
+.root {
+    -fx-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Ubuntu", Cantarell, sans-serif;
+    -fx-background-color: radial-gradient(focus-angle 0.0deg, focus-distance 0.0%, center 20.0% 20.0%, radius 100.0%, #132a4a 0.0%, #0a192f 50.0%, #050d18 100.0%);
+}
+
+.root-container {
+    -fx-background-color: transparent;
+}
+
+/* --------------------------------------------------------------------------
+   Top-Left Minimalist Information Display (Time, Date, Weather)
+   -------------------------------------------------------------------------- */
+.minimal-clock {
+    -fx-font-size: 96px;
+    -fx-font-weight: 800;
+    -fx-text-fill: #ffffff;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.45), 12, 0, 0, 4);
+}
+
+.minimal-date {
+    -fx-font-size: 28px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #38bdf8; /* Vivid Sky Blue */
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.3), 8, 0, 0, 2);
+}
+
+.minimal-weather-row {
+    -fx-padding: 8px 0 0 0;
+}
+
+.minimal-weather-icon {
+    -fx-font-size: 28px;
+}
+
+.minimal-weather-temp {
+    -fx-font-size: 26px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #ffffff;
+}
+
+.minimal-weather-dot {
+    -fx-font-size: 18px;
+    -fx-text-fill: #475569;
+}
+
+.minimal-weather-desc {
+    -fx-font-size: 22px;
+    -fx-font-weight: 500;
+    -fx-text-fill: #e2e8f0;
+}
+
+.minimal-weather-city {
+    -fx-font-size: 20px;
+    -fx-font-weight: 500;
+    -fx-text-fill: #94a3b8;
+}
+
+/* --------------------------------------------------------------------------
+   Notification Banner (Floating Pill)
+   -------------------------------------------------------------------------- */
+.notification-banner {
+    -fx-background-color: rgba(245, 158, 11, 0.2);
+    -fx-border-color: rgba(245, 158, 11, 0.6);
+    -fx-border-radius: 16px;
+    -fx-background-radius: 16px;
+    -fx-border-width: 1.5px;
+    -fx-padding: 12px 24px;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.5), 18, 0, 0, 6);
+}
+
+.notification-text {
+    -fx-font-size: 20px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #fef08a;
+}
+
+.notification-close-btn {
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #fef08a;
+    -fx-padding: 4px 10px;
+    -fx-background-color: rgba(255, 255, 255, 0.1);
+    -fx-background-radius: 12px;
+    -fx-cursor: hand;
+}
+
+.notification-close-btn:hover {
+    -fx-background-color: rgba(255, 255, 255, 0.25);
+    -fx-text-fill: #ffffff;
+}
+
+/* --------------------------------------------------------------------------
+   Spotify Fullscreen Screen Styles
+   -------------------------------------------------------------------------- */
+.spotify-background {
+    -fx-background-color: radial-gradient(focus-angle 0.0deg, focus-distance 0.0%, center 25.0% 25.0%, radius 100.0%, #122822 0.0%, #0a192f 50.0%, #050d18 100.0%);
+}
+
+.spotify-speaker-badge {
+    -fx-background-color: rgba(29, 185, 84, 0.18);
+    -fx-background-radius: 20px;
+    -fx-border-color: rgba(29, 185, 84, 0.5);
+    -fx-border-radius: 20px;
+    -fx-border-width: 1px;
+    -fx-padding: 6px 16px;
+}
+
+.spotify-speaker-text {
+    -fx-text-fill: #1ed760;
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+}
+
+.spotify-art-card {
+    -fx-background-color: #101c2e;
+    -fx-background-radius: 20px;
+    -fx-border-radius: 20px;
+    -fx-border-color: rgba(255, 255, 255, 0.1);
+    -fx-border-width: 1px;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.7), 25, 0, 0, 10);
+}
+
+.spotify-status-tag {
+    -fx-text-fill: #1ed760;
+    -fx-font-size: 13px;
+    -fx-font-weight: 800;
+    -fx-letter-spacing: 2px;
+}
+
+.spotify-song-title {
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 32px;
+    -fx-font-weight: 800;
+}
+
+.spotify-artist-title {
+    -fx-text-fill: #1ed760;
+    -fx-font-size: 22px;
+    -fx-font-weight: 700;
+}
+
+.spotify-album-title {
+    -fx-text-fill: #94a3b8;
+    -fx-font-size: 16px;
+    -fx-font-weight: 500;
+}
+
+/* --------------------------------------------------------------------------
+   Voice Assistant & Gemini Touch UI
+   -------------------------------------------------------------------------- */
+.voice-touch-btn {
+    -fx-background-color: rgba(56, 189, 248, 0.15);
+    -fx-border-color: rgba(56, 189, 248, 0.4);
+    -fx-border-radius: 24px;
+    -fx-background-radius: 24px;
+    -fx-border-width: 1px;
+    -fx-padding: 8px 16px;
+    -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(56, 189, 248, 0.25), 10, 0, 0, 2);
+}
+
+.voice-touch-btn:hover {
+    -fx-background-color: rgba(56, 189, 248, 0.28);
+    -fx-border-color: #38bdf8;
+}
+
+.voice-touch-btn-text {
+    -fx-text-fill: #38bdf8;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+}
+
+.voice-card {
+    -fx-background-color: rgba(10, 25, 47, 0.95);
+    -fx-border-color: rgba(56, 189, 248, 0.35);
+    -fx-border-radius: 20px;
+    -fx-background-radius: 20px;
+    -fx-border-width: 1.5px;
+    -fx-padding: 20px 24px;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.7), 25, 0, 0, 8);
+}
+
+.voice-status-label {
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #38bdf8;
+}
+
+.voice-response-text {
+    -fx-font-size: 20px;
+    -fx-font-weight: 500;
+    -fx-text-fill: #ffffff;
+    -fx-line-spacing: 4px;
+}

@@ -2,7 +2,12 @@ package com.example.nuriaassistant;
 
 import com.example.nuriaassistant.config.ConfigLoader;
 import com.example.nuriaassistant.models.SpotifyTrackData;
+import com.example.nuriaassistant.services.GeminiService;
 import com.example.nuriaassistant.services.NotificationServer;
+import com.example.nuriaassistant.services.TelegramService;
+import com.example.nuriaassistant.services.TextToSpeechService;
+import com.example.nuriaassistant.services.ThemeManager;
+import com.example.nuriaassistant.services.VoiceAssistantService;
 import com.example.nuriaassistant.services.WeatherService;
 import com.example.nuriaassistant.spotify.SpotifyService;
 import javafx.animation.Animation;
@@ -20,21 +25,30 @@ import javafx.scene.control.Label;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.AnchorPane;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
 import javafx.scene.shape.SVGPath;
 import javafx.util.Duration;
 
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Controller for the smart assistant application.
- * Manages clock, weather, notification server, and full-screen Spotify
- * playback mode with animated Spotify logo transition when active.
+ * Main Controller for the Nuria Assistant application.
+ * Manages:
+ * 1. Real-time Clock and Date display (Day of week, Day of month, and Month name).
+ * 2. High-contrast, minimalist top-left layout with deep Navy Blue background.
+ * 3. Weather widget data fetching and presentation.
+ * 4. Local Notification server with visual banner alerts.
+ * 5. Full-screen Spotify playback mode with smooth intro logo animations.
+ * 6. Hands-free & Touch Voice Assistant powered by Gemini with Google Search & Voice Output.
  */
 public class AssistantController {
+
+    @FXML
+    private AnchorPane rootPane;
 
     @FXML
     private AnchorPane homeLayer;
@@ -43,10 +57,41 @@ public class AssistantController {
     private Label timeLabel;
 
     @FXML
-    private Label weatherLabel;
+    private Label dateLabel;
+
+    @FXML
+    private Label weatherCityLabel;
+
+    @FXML
+    private Label weatherIconLabel;
+
+    @FXML
+    private Label weatherTempLabel;
+
+    @FXML
+    private Label weatherDescLabel;
+
+    @FXML
+    private HBox notificationBanner;
 
     @FXML
     private Label notificationLabel;
+
+    // Gemini Voice UI
+    @FXML
+    private HBox voiceTouchButton;
+
+    @FXML
+    private Label voiceButtonText;
+
+    @FXML
+    private VBox voiceAssistantLayer;
+
+    @FXML
+    private Label voiceStatusLabel;
+
+    @FXML
+    private Label voiceResponseLabel;
 
     // Spotify Full Screen UI
     @FXML
@@ -79,14 +124,18 @@ public class AssistantController {
 
     private WeatherService weatherService;
     private NotificationServer notificationServer;
+    private TelegramService telegramService;
     private SpotifyService spotifyService;
+    private GeminiService geminiService;
+    private TextToSpeechService ttsService;
+    private VoiceAssistantService voiceAssistantService;
 
-    // Playback and UI state
+    // UI State
     private boolean isCurrentlyShowingSpotify = false;
     private String currentCoverUrl = null;
     private Animation activeTransition = null;
 
-    // Background thread executor for non-blocking Spotify network polling
+    // Background thread executor for non-blocking Spotify polling
     private final ExecutorService spotifyExecutor = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "spotify-poll-thread");
         t.setDaemon(true);
@@ -97,27 +146,38 @@ public class AssistantController {
     public void initialize() {
         ConfigLoader configLoader = new ConfigLoader();
 
-        // Initialize clock
+        // 1. Initialize Clock and Date updates (1-second tick)
         updateTime();
-        Timeline clock = new Timeline(new KeyFrame(Duration.seconds(1), event -> updateTime()));
-        clock.setCycleCount(Animation.INDEFINITE);
-        clock.play();
+        Timeline clockTimeline = new Timeline(new KeyFrame(Duration.seconds(1), event -> updateTime()));
+        clockTimeline.setCycleCount(Animation.INDEFINITE);
+        clockTimeline.play();
 
-        // Initialize weather service
+        // 2. Initialize Weather Service
         String apiKey = configLoader.getProperty("OPENWEATHER_API_KEY");
         String city = configLoader.getProperty("OPENWEATHER_CITY");
+        String displayCity = city != null && !city.isBlank() ? city.split(",")[0].trim() : "Granada";
+
+        if (weatherCityLabel != null) {
+            weatherCityLabel.setText(displayCity);
+        }
 
         if (apiKey != null && !apiKey.isEmpty()) {
-            weatherService = new WeatherService(apiKey, city != null ? city : "Madrid");
+            weatherService = new WeatherService(apiKey, city != null ? city : "Granada,ES");
             fetchWeather();
+            // Refresh weather every 30 minutes
             Timeline weatherTimer = new Timeline(new KeyFrame(Duration.minutes(30), event -> fetchWeather()));
             weatherTimer.setCycleCount(Animation.INDEFINITE);
             weatherTimer.play();
         } else {
-            weatherLabel.setText("Weather: API Key missing");
+            if (weatherTempLabel != null) {
+                weatherTempLabel.setText("--°C");
+            }
+            if (weatherDescLabel != null) {
+                weatherDescLabel.setText("API key missing");
+            }
         }
 
-        // Initialize notification server
+        // 3. Initialize Local Notification Server
         notificationServer = new NotificationServer(this::displayNotification);
         try {
             notificationServer.start();
@@ -125,7 +185,7 @@ public class AssistantController {
             System.err.println("Failed to start notification server: " + e.getMessage());
         }
 
-        // Initialize Spotify service
+        // 4. Initialize Spotify Service
         String clientId = configLoader.getProperty("SPOTIFY_CLIENT_ID");
         String clientSecret = configLoader.getProperty("SPOTIFY_CLIENT_SECRET");
         String redirectUri = configLoader.getProperty("SPOTIFY_REDIRECT_URI");
@@ -137,7 +197,7 @@ public class AssistantController {
             // Start embedded OAuth callback server on port 8888
             spotifyService.startAuthCallbackServer(this::handleSpotifyCallback, 8888);
 
-            // Generate authorization URL
+            // Print authorization URI for easy setup
             try {
                 String authUrl = spotifyService.getAuthorizationUri();
                 System.out.println("Spotify Auth URL: " + authUrl);
@@ -145,12 +205,114 @@ public class AssistantController {
                 System.err.println("Failed to generate Spotify Auth URL: " + e.getMessage());
             }
 
-            // Start polling for currently playing track
+            // Start periodic polling for currently playing track (every 4 seconds)
             pollCurrentlyPlaying();
             Timeline spotifyTimer = new Timeline(new KeyFrame(Duration.seconds(4), event -> pollCurrentlyPlaying()));
             spotifyTimer.setCycleCount(Animation.INDEFINITE);
             spotifyTimer.play();
         }
+
+        // 5. Initialize Telegram Bot Service (Remote Messaging from outside local network)
+        String telegramToken = configLoader.getProperty("TELEGRAM_BOT_TOKEN");
+        String telegramChatId = configLoader.getProperty("TELEGRAM_ALLOWED_CHAT_ID");
+
+        if (telegramToken != null && !telegramToken.isBlank()) {
+            telegramService = new TelegramService(telegramToken, telegramChatId, this::displayNotification);
+            telegramService.start();
+        }
+
+        // 6. Initialize Gemini Voice Assistant (Hands-Free + Google Search Grounding)
+        String geminiKey = configLoader.getProperty("GEMINI_API_KEY");
+        if (geminiKey != null && !geminiKey.isBlank()) {
+            geminiService = new GeminiService(geminiKey);
+            ttsService = new TextToSpeechService();
+            voiceAssistantService = new VoiceAssistantService(
+                    geminiService,
+                    ttsService,
+                    this::onVoiceStateChanged,
+                    this::onVoiceResponseReceived
+            );
+            // Start listening loop for microphone audio
+            voiceAssistantService.start();
+            System.out.println("VoiceAssistantService initialized with Gemini Google Search Grounding.");
+        }
+    }
+
+    /**
+     * Updates the clock display and the date (day of the week, day of month, and month name).
+     */
+    private void updateTime() {
+        LocalDateTime now = LocalDateTime.now();
+
+        if (timeLabel != null) {
+            timeLabel.setText(ThemeManager.formatTime(now));
+        }
+        if (dateLabel != null) {
+            dateLabel.setText(ThemeManager.formatDate(now));
+        }
+    }
+
+    /**
+     * Triggered when user taps the on-screen Gemini Voice button.
+     */
+    @FXML
+    public void onVoiceButtonClicked() {
+        if (voiceAssistantService != null) {
+            voiceAssistantService.triggerManualListen();
+        } else {
+            showVoiceAssistantPopup("Configuración", "Por favor, añade tu clave GEMINI_API_KEY en config.properties para activar la voz.");
+        }
+    }
+
+    /**
+     * Dismisses the voice assistant popup card.
+     */
+    @FXML
+    public void dismissVoiceAssistant() {
+        if (voiceAssistantLayer != null) {
+            FadeTransition fadeOut = new FadeTransition(Duration.millis(300), voiceAssistantLayer);
+            fadeOut.setFromValue(voiceAssistantLayer.getOpacity());
+            fadeOut.setToValue(0.0);
+            fadeOut.setOnFinished(e -> voiceAssistantLayer.setVisible(false));
+            fadeOut.play();
+        }
+    }
+
+    private void onVoiceStateChanged(VoiceAssistantService.State state) {
+        Platform.runLater(() -> {
+            if (voiceAssistantLayer == null) return;
+            switch (state) {
+                case LISTENING -> {
+                    showVoiceAssistantPopup("🎙️ Escuchando...", "Habla ahora, te escucho...");
+                    if (voiceButtonText != null) voiceButtonText.setText("Detener 🔴");
+                }
+                case PROCESSING -> {
+                    showVoiceAssistantPopup("🧠 Consultando...", "Buscando en Google con Gemini...");
+                    if (voiceButtonText != null) voiceButtonText.setText("Pensando...");
+                }
+                case IDLE -> {
+                    if (voiceButtonText != null) voiceButtonText.setText("Gemini Voice");
+                }
+            }
+        });
+    }
+
+    private void onVoiceResponseReceived(String response) {
+        Platform.runLater(() -> {
+            showVoiceAssistantPopup("✨ Nuria (Gemini)", response);
+        });
+    }
+
+    private void showVoiceAssistantPopup(String title, String content) {
+        if (voiceAssistantLayer == null) return;
+        if (voiceStatusLabel != null) voiceStatusLabel.setText(title);
+        if (voiceResponseLabel != null) voiceResponseLabel.setText(content);
+
+        voiceAssistantLayer.setVisible(true);
+        FadeTransition fadeIn = new FadeTransition(Duration.millis(250), voiceAssistantLayer);
+        fadeIn.setFromValue(voiceAssistantLayer.getOpacity());
+        fadeIn.setToValue(1.0);
+        fadeIn.play();
     }
 
     /**
@@ -301,6 +463,92 @@ public class AssistantController {
     }
 
     /**
+     * Fetches weather information from OpenWeatherMap API.
+     */
+    private void fetchWeather() {
+        if (weatherService == null) {
+            return;
+        }
+        weatherService.fetchWeather(
+                data -> {
+                    if (data.temperature() == 0.0 && "Unknown".equals(data.description())) {
+                        if (weatherTempLabel != null) weatherTempLabel.setText("--°C");
+                        if (weatherDescLabel != null) weatherDescLabel.setText("Data unavailable");
+                    } else {
+                        String icon = getIconForWeather(data.description());
+                        if (weatherIconLabel != null) weatherIconLabel.setText(icon);
+                        if (weatherTempLabel != null) weatherTempLabel.setText(String.format("%.1f°C", data.temperature()));
+                        if (weatherDescLabel != null) weatherDescLabel.setText(capitalize(data.description()));
+                    }
+                },
+                error -> {
+                    if (weatherTempLabel != null) weatherTempLabel.setText("--°C");
+                    if (weatherDescLabel != null) weatherDescLabel.setText("Connection error");
+                }
+        );
+    }
+
+    /**
+     * Displays a persistent notification message in the notification banner.
+     * The message stays visible until touched on screen or cleared via Telegram /clear.
+     *
+     * @param message Notification message text.
+     */
+    private void displayNotification(String message) {
+        Platform.runLater(() -> {
+            if (message == null || message.trim().isEmpty()) {
+                if (notificationBanner != null) notificationBanner.setVisible(false);
+                if (notificationLabel != null) notificationLabel.setText("");
+                return;
+            }
+
+            if (notificationLabel != null) {
+                notificationLabel.setText(message);
+            }
+            if (notificationBanner != null) {
+                notificationBanner.setVisible(true);
+            }
+        });
+    }
+
+    /**
+     * Dismisses the notification banner when tapped by the user on the touchscreen.
+     */
+    @FXML
+    public void dismissNotification() {
+        if (notificationBanner != null) {
+            notificationBanner.setVisible(false);
+        }
+        if (notificationLabel != null) {
+            notificationLabel.setText("");
+        }
+    }
+
+    /**
+     * Returns an emoji icon for the given weather description.
+     */
+    private String getIconForWeather(String description) {
+        if (description == null) return "🌡️";
+        return switch (description.toLowerCase()) {
+            case "clear" -> "☀️";
+            case "clouds" -> "☁️";
+            case "rain" -> "🌧️";
+            case "drizzle" -> "🌦️";
+            case "thunderstorm" -> "⛈️";
+            case "snow" -> "❄️";
+            default -> "🌡️";
+        };
+    }
+
+    /**
+     * Helper to capitalize the first letter of each word in a string.
+     */
+    private String capitalize(String text) {
+        if (text == null || text.isEmpty()) return "";
+        return Character.toUpperCase(text.charAt(0)) + text.substring(1).toLowerCase();
+    }
+
+    /**
      * Handles Spotify OAuth callback with authorization code.
      *
      * @param authorizationCode OAuth authorization code.
@@ -324,6 +572,15 @@ public class AssistantController {
      * Cleanly shuts down background threads and server resources.
      */
     public void shutdown() {
+        if (voiceAssistantService != null) {
+            voiceAssistantService.stop();
+        }
+        if (ttsService != null) {
+            ttsService.stop();
+        }
+        if (telegramService != null) {
+            telegramService.stop();
+        }
         if (spotifyService != null) {
             spotifyService.stopAuthCallbackServer();
         }
@@ -331,48 +588,5 @@ public class AssistantController {
             notificationServer.stop();
         }
         spotifyExecutor.shutdownNow();
-    }
-
-    private void updateTime() {
-        LocalDateTime now = LocalDateTime.now();
-        timeLabel.setText(now.format(DateTimeFormatter.ofPattern("HH:mm:ss")));
-    }
-
-    private void fetchWeather() {
-        if (weatherService == null) {
-            return;
-        }
-        weatherService.fetchWeather(
-                data -> {
-                    if (data.temperature() == 0.0 && "Unknown".equals(data.description())) {
-                        weatherLabel.setText("Weather: Error parsing data");
-                    } else {
-                        String icon = getIconForWeather(data.description());
-                        weatherLabel.setText(String.format("%s %.1f°C, %s", icon, data.temperature(), data.description()));
-                    }
-                },
-                error -> weatherLabel.setText("Weather: Connection error")
-        );
-    }
-
-    private void displayNotification(String message) {
-        Platform.runLater(() -> {
-            notificationLabel.setText(message);
-            // Hide notification after 10 seconds
-            Timeline hideTimer = new Timeline(new KeyFrame(Duration.seconds(10), event -> notificationLabel.setText("")));
-            hideTimer.play();
-        });
-    }
-
-    private String getIconForWeather(String description) {
-        return switch (description.toLowerCase()) {
-            case "clear" -> "☀️";
-            case "clouds" -> "☁️";
-            case "rain" -> "🌧️";
-            case "drizzle" -> "🌦️";
-            case "thunderstorm" -> "⛈️";
-            case "snow" -> "❄️";
-            default -> "🌡️";
-        };
     }
 }

@@ -8,59 +8,141 @@
 <?import javafx.scene.layout.VBox?>
 <?import javafx.scene.shape.SVGPath?>
 
-<AnchorPane xmlns:fx="http://javafx.com/fxml"
+<AnchorPane fx:id="rootPane"
+            xmlns:fx="http://javafx.com/fxml"
             fx:controller="com.example.nuriaassistant.AssistantController"
             prefWidth="1024.0" prefHeight="600.0"
-            style="-fx-background-color: #000000;">
+            style="-fx-background-color: radial-gradient(focus-angle 0.0deg, focus-distance 0.0%, center 20.0% 20.0%, radius 100.0%, #132a4a 0.0%, #0a192f 50.0%, #050d18 100.0%);"
+            styleClass="root-container"
+            stylesheets="@styles.css">
 
-    <!-- Home Layer: Clock, Weather, Notifications (Shown when Spotify is paused/inactive) -->
+    <!-- Home Layer: Top-Left Minimalist Time, Date & Weather Display -->
     <AnchorPane fx:id="homeLayer"
                 AnchorPane.topAnchor="0.0" AnchorPane.bottomAnchor="0.0"
                 AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0">
 
-        <!-- Clock and Weather Widget -->
-        <VBox fx:id="infoWidget" spacing="8.0"
+        <!-- Top-Right: Gemini Voice Assistant Button (Touch or Hands-Free) -->
+        <HBox fx:id="voiceTouchButton"
+              alignment="CENTER" spacing="8.0"
+              onMouseClicked="#onVoiceButtonClicked"
+              styleClass="voice-touch-btn"
+              AnchorPane.topAnchor="35.0"
+              AnchorPane.rightAnchor="45.0">
+            <Label text="✨" style="-fx-font-size: 16px;"/>
+            <Label fx:id="voiceButtonText" text="Gemini Voice" styleClass="voice-touch-btn-text"/>
+        </HBox>
+
+        <!-- Top-Left Main Info Block: Time, Date, Weather & Temperature -->
+        <VBox alignment="TOP_LEFT" spacing="6.0"
               AnchorPane.topAnchor="40.0"
-              AnchorPane.leftAnchor="40.0">
+              AnchorPane.leftAnchor="48.0">
 
+            <!-- 1. Real-time Clock (Crisp, High-Contrast White) -->
             <Label fx:id="timeLabel"
-                   style="-fx-text-fill: white; -fx-font-size: 56px; -fx-font-weight: bold;"/>
+                   text="--:--:--"
+                   styleClass="minimal-clock"/>
 
-            <Label fx:id="weatherLabel"
-                   style="-fx-text-fill: #bbbbbb; -fx-font-size: 24px;"/>
+            <!-- 2. Date: Day of the week + Day + Month (Vivid Sky Blue) -->
+            <Label fx:id="dateLabel"
+                   text="Loading date..."
+                   styleClass="minimal-date"/>
+
+            <!-- 3. Weather & Temperature Row (Integrated right under date) -->
+            <HBox alignment="CENTER_LEFT" spacing="12.0" styleClass="minimal-weather-row">
+                <Label fx:id="weatherIconLabel"
+                       text="☀️"
+                       styleClass="minimal-weather-icon"/>
+
+                <Label fx:id="weatherTempLabel"
+                       text="--°C"
+                       styleClass="minimal-weather-temp"/>
+
+                <Label text="•" styleClass="minimal-weather-dot"/>
+
+                <Label fx:id="weatherDescLabel"
+                       text="Fetching weather..."
+                       styleClass="minimal-weather-desc"/>
+
+                <Label text="•" styleClass="minimal-weather-dot"/>
+
+                <Label fx:id="weatherCityLabel"
+                       text="Granada"
+                       styleClass="minimal-weather-city"/>
+            </HBox>
         </VBox>
 
-        <!-- Notification Area -->
-        <Label fx:id="notificationLabel"
-               text=""
-               style="-fx-text-fill: #ffeb3b; -fx-font-size: 32px; -fx-font-weight: bold;"
-               AnchorPane.bottomAnchor="50.0"
-               AnchorPane.leftAnchor="40.0"
-               AnchorPane.rightAnchor="40.0"
-               alignment="CENTER"
-               wrapText="true"/>
+        <!-- Voice Assistant Modal Card (Activated hands-free or via touch button) -->
+        <VBox fx:id="voiceAssistantLayer"
+              visible="false" opacity="0.0"
+              alignment="TOP_LEFT" spacing="12.0"
+              styleClass="voice-card"
+              prefWidth="520.0"
+              AnchorPane.topAnchor="180.0"
+              AnchorPane.leftAnchor="48.0">
+
+            <HBox alignment="CENTER_LEFT" spacing="10.0">
+                <Label text="✨" style="-fx-font-size: 18px;"/>
+                <Label fx:id="voiceStatusLabel"
+                       text="Escuchando..."
+                       styleClass="voice-status-label"/>
+                <HBox HBox.hgrow="ALWAYS"/>
+                <Label text="✕"
+                       onMouseClicked="#dismissVoiceAssistant"
+                       styleClass="notification-close-btn"/>
+            </HBox>
+
+            <Label fx:id="voiceResponseLabel"
+                   text="..."
+                   styleClass="voice-response-text"
+                   wrapText="true"/>
+        </VBox>
+
+        <!-- Notification Banner at Bottom (Sticky Note - Persists until tapped or cleared via Telegram) -->
+        <HBox fx:id="notificationBanner"
+              visible="false"
+              alignment="CENTER_LEFT" spacing="14.0"
+              styleClass="notification-banner"
+              AnchorPane.bottomAnchor="30.0"
+              AnchorPane.leftAnchor="48.0"
+              AnchorPane.rightAnchor="48.0">
+
+            <Label text="🔔" style="-fx-font-size: 22px;"/>
+            <Label fx:id="notificationLabel"
+                   text=""
+                   styleClass="notification-text"
+                   wrapText="true"
+                   HBox.hgrow="ALWAYS"/>
+
+            <!-- Spacer -->
+            <HBox HBox.hgrow="ALWAYS"/>
+
+            <!-- Touch Dismiss Button -->
+            <Label text="✕"
+                   onMouseClicked="#dismissNotification"
+                   styleClass="notification-close-btn"/>
+        </HBox>
     </AnchorPane>
 
     <!-- Spotify Full Screen Layer (Activated when Spotify is playing) -->
     <AnchorPane fx:id="spotifyFullScreenLayer"
                 visible="false" opacity="0.0"
-                style="-fx-background-color: linear-gradient(to bottom right, #181818, #0e0e0e);"
+                styleClass="spotify-background"
                 AnchorPane.topAnchor="0.0" AnchorPane.bottomAnchor="0.0"
                 AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0">
 
         <!-- Header: Speaker Device Info & Spotify Brand -->
         <HBox alignment="CENTER_LEFT" spacing="15.0"
-              AnchorPane.topAnchor="25.0"
-              AnchorPane.leftAnchor="40.0"
-              AnchorPane.rightAnchor="40.0">
+              AnchorPane.topAnchor="24.0"
+              AnchorPane.leftAnchor="36.0"
+              AnchorPane.rightAnchor="36.0">
 
             <!-- Speaker Indicator Badge -->
             <HBox alignment="CENTER_LEFT" spacing="10.0"
-                  style="-fx-background-color: rgba(29, 185, 84, 0.15); -fx-background-radius: 20px; -fx-padding: 6px 16px; -fx-border-color: #1DB954; -fx-border-radius: 20px; -fx-border-width: 1px;">
-                <Label text="🔊" style="-fx-font-size: 18px;"/>
+                  styleClass="spotify-speaker-badge">
+                <Label text="🔊" style="-fx-font-size: 16px;"/>
                 <Label fx:id="spotifySpeakerLabel"
                        text="Raspberry Pi Speaker"
-                       style="-fx-text-fill: #1DB954; -fx-font-size: 16px; -fx-font-weight: bold;"/>
+                       styleClass="spotify-speaker-text"/>
             </HBox>
 
             <!-- Spacer -->
@@ -77,13 +159,13 @@
 
         <!-- Main Content: Cover Art + Song Info -->
         <HBox alignment="CENTER_LEFT" spacing="45.0"
-              AnchorPane.topAnchor="90.0" AnchorPane.bottomAnchor="40.0"
-              AnchorPane.leftAnchor="50.0" AnchorPane.rightAnchor="50.0">
+              AnchorPane.topAnchor="85.0" AnchorPane.bottomAnchor="35.0"
+              AnchorPane.leftAnchor="45.0" AnchorPane.rightAnchor="45.0">
 
             <!-- Album Cover Container -->
             <StackPane prefWidth="320.0" prefHeight="320.0"
-                       style="-fx-background-color: #222222; -fx-background-radius: 16px; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.7), 25, 0, 0, 10);">
-                <Label text="🎵" style="-fx-font-size: 64px; -fx-text-fill: #444444;"/>
+                       styleClass="spotify-art-card">
+                <Label text="🎵" style="-fx-font-size: 64px; -fx-text-fill: #333d47;"/>
                 <ImageView fx:id="spotifyCoverArtView"
                            fitWidth="320.0" fitHeight="320.0"
                            preserveRatio="true"
@@ -94,33 +176,33 @@
             <VBox alignment="CENTER_LEFT" spacing="12.0" HBox.hgrow="ALWAYS">
                 <Label fx:id="spotifyStatusLabel"
                        text="NOW PLAYING"
-                       style="-fx-text-fill: #1DB954; -fx-font-size: 14px; -fx-font-weight: bold; -fx-letter-spacing: 2px;"/>
+                       styleClass="spotify-status-tag"/>
 
                 <Label fx:id="spotifySongNameLabel"
                        text="Song Name"
                        wrapText="true"
-                       style="-fx-text-fill: white; -fx-font-size: 34px; -fx-font-weight: bold;"/>
+                       styleClass="spotify-song-title"/>
 
                 <Label fx:id="spotifyArtistNameLabel"
                        text="Artist Name"
                        wrapText="true"
-                       style="-fx-text-fill: #1DB954; -fx-font-size: 24px; -fx-font-weight: bold;"/>
+                       styleClass="spotify-artist-title"/>
 
                 <Label fx:id="spotifyAlbumNameLabel"
                        text="Album Name"
                        wrapText="true"
-                       style="-fx-text-fill: #888888; -fx-font-size: 18px;"/>
+                       styleClass="spotify-album-title"/>
             </VBox>
         </HBox>
     </AnchorPane>
 
     <!-- Spotify Intro Transition Overlay (Pop-up Logo animation before full screen mode) -->
     <StackPane fx:id="spotifyIntroLayer"
-               visible="false" opacity="0.0"
-               mouseTransparent="true"
-               style="-fx-background-color: rgba(0, 0, 0, 0.85);"
-               AnchorPane.topAnchor="0.0" AnchorPane.bottomAnchor="0.0"
-               AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0">
+                visible="false" opacity="0.0"
+                mouseTransparent="true"
+                style="-fx-background-color: rgba(0, 0, 0, 0.88);"
+                AnchorPane.topAnchor="0.0" AnchorPane.bottomAnchor="0.0"
+                AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0">
 
         <VBox alignment="CENTER" spacing="20.0">
             <SVGPath fx:id="spotifyIntroLogo"
@@ -130,7 +212,7 @@
             <Label text="Spotify Connect"
                    style="-fx-text-fill: #1DB954; -fx-font-size: 26px; -fx-font-weight: bold; -fx-padding: 30px 0 0 0;"/>
             <Label text="Raspberry Pi Speaker Active"
-                   style="-fx-text-fill: #cccccc; -fx-font-size: 16px;"/>
+                   style="-fx-text-fill: #94a3b8; -fx-font-size: 16px;"/>
         </VBox>
     </StackPane>
 
