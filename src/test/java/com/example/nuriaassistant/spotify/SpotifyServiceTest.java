@@ -89,9 +89,7 @@ public class SpotifyServiceTest {
         assertEquals("A Night at the Opera", data.album());
         assertEquals("https://img.spotify.com/300", data.coverUrl());
         assertTrue(data.isPlaying());
-        assertEquals(65000, data.progressMs());
-        assertEquals(354000, data.durationMs());
-        assertEquals("1:05 / 5:54", data.getFormattedProgress());
+        assertEquals("Raspberry Pi Speaker", data.deviceName());
     }
 
     @Test
@@ -144,12 +142,11 @@ public class SpotifyServiceTest {
 
     @Test
     void testNullAndEmptyHandling() {
-        assertNull(spotifyService.extractTrackData(null));
+        assertNull(spotifyService.extractTrackData((CurrentlyPlaying) null));
         assertEquals("", spotifyService.getSongName(null));
         assertEquals("", spotifyService.getArtistName(null));
         assertEquals("", spotifyService.getAlbumCoverUrl(null));
         assertEquals("", spotifyService.getAlbumName(null));
-        assertEquals(0, spotifyService.getDurationMs(null));
         assertTrue(spotifyService.getArtistNames(null).isEmpty());
         assertTrue(spotifyService.getAlbumCoverUrls(null).isEmpty());
 
@@ -162,19 +159,19 @@ public class SpotifyServiceTest {
     }
 
     @Test
-    void testSpotifyTrackDataFormattedProgress() {
-        SpotifyTrackData data = new SpotifyTrackData(
+    void testSpotifyTrackDataSpeakerDefault() {
+        SpotifyTrackData dataWithNullDevice = new SpotifyTrackData(
                 "Song", "Artist", List.of("Artist"), "Album",
                 "http://example.com/art.jpg", List.of("http://example.com/art.jpg"),
-                true, 75000, 215000
+                true, null
         );
+        assertEquals("Raspberry Pi Speaker", dataWithNullDevice.deviceName());
 
-        assertEquals("1:15 / 3:35", data.getFormattedProgress());
-
-        SpotifyTrackData invalidDuration = new SpotifyTrackData(
+        SpotifyTrackData dataWithCustomDevice = new SpotifyTrackData(
                 "Song", "Artist", List.of("Artist"), "Album",
-                null, null, true, 0, 0
+                "http://example.com/art.jpg", List.of("http://example.com/art.jpg"),
+                true, "Living Room Pi"
         );
-        assertEquals("", invalidDuration.getFormattedProgress());
+        assertEquals("Living Room Pi", dataWithCustomDevice.deviceName());
     }
 }

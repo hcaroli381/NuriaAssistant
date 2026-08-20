@@ -8,6 +8,7 @@ import se.michaelthelin.spotify.exceptions.SpotifyWebApiException;
 import se.michaelthelin.spotify.model_objects.IPlaylistItem;
 import se.michaelthelin.spotify.model_objects.credentials.AuthorizationCodeCredentials;
 import se.michaelthelin.spotify.model_objects.miscellaneous.CurrentlyPlaying;
+import se.michaelthelin.spotify.model_objects.miscellaneous.CurrentlyPlayingContext;
 import se.michaelthelin.spotify.model_objects.specification.AlbumSimplified;
 import se.michaelthelin.spotify.model_objects.specification.ArtistSimplified;
 import se.michaelthelin.spotify.model_objects.specification.Episode;
@@ -16,6 +17,7 @@ import se.michaelthelin.spotify.model_objects.specification.Track;
 import se.michaelthelin.spotify.requests.authorization.authorization_code.AuthorizationCodeRefreshRequest;
 import se.michaelthelin.spotify.requests.authorization.authorization_code.AuthorizationCodeRequest;
 import se.michaelthelin.spotify.requests.authorization.authorization_code.AuthorizationCodeUriRequest;
+import se.michaelthelin.spotify.requests.data.player.GetInformationAboutUsersCurrentPlaybackRequest;
 import se.michaelthelin.spotify.requests.data.player.GetUsersCurrentlyPlayingTrackRequest;
 
 import java.io.IOException;
@@ -31,13 +33,14 @@ import java.util.stream.Collectors;
 
 /**
  * Service for interacting with Spotify Web API, retrieving currently playing
- * track metadata, song images, song names, artist names, and managing OAuth authentication.
+ * track metadata, song images, song names, artist names, speaker device info,
+ * and managing OAuth authentication.
  */
 public class SpotifyService {
 
     public enum ImageSizePreference {
-        LARGE,   // Typically 640x640
-        MEDIUM,  // Typically 300x300 (optimal for 1024x600 screen)
+        LARGE,   // Typically 640x640 (crisp for full-screen display)
+        MEDIUM,  // Typically 300x300 (optimal memory balance)
         SMALL    // Typically 64x64
     }
 
@@ -197,6 +200,35 @@ public class SpotifyService {
     }
 
     /**
+     * Retrieves full playback state context including connected active device info from Spotify API.
+     *
+     * @return CurrentlyPlayingContext, or null on error or no active playback.
+     */
+    public CurrentlyPlayingContext getPlaybackContext() {
+        if (spotifyApi.getAccessToken() == null || spotifyApi.getAccessToken().isEmpty()) {
+            return null;
+        }
+        try {
+            GetInformationAboutUsersCurrentPlaybackRequest request =
+                    spotifyApi.getInformationAboutUsersCurrentPlayback().build();
+
+            return request.execute();
+        } catch (SpotifyWebApiException e) {
+            if (e.getMessage() != null && e.getMessage().contains("401")) {
+                System.out.println("Spotify token expired. Refreshing...");
+                if (refreshAccessToken()) {
+                    return getPlaybackContext();
+                }
+            }
+            System.err.println("Spotify API error: " + e.getMessage());
+            return null;
+        } catch (IOException | ParseException e) {
+            System.err.println("Error fetching Spotify playback context: " + e.getMessage());
+            return null;
+        }
+    }
+
+    /**
      * Retrieves raw CurrentlyPlaying object from Spotify API.
      * Automatically attempts to refresh the access token if an expired token error (401) is encountered.
      *
@@ -212,7 +244,6 @@ public class SpotifyService {
 
             return request.execute();
         } catch (SpotifyWebApiException e) {
-            // Handle expired token (401) by refreshing once and retrying
             if (e.getMessage() != null && e.getMessage().contains("401")) {
                 System.out.println("Spotify token expired. Refreshing...");
                 if (refreshAccessToken()) {
@@ -229,13 +260,54 @@ public class SpotifyService {
 
     /**
      * Fetches current playback and returns a structured {@link SpotifyTrackData} object containing
-     * song name, artist name(s), album cover images, and playback status.
+     * song name, artist name(s), album cover images, and Raspberry Pi speaker device info.
      *
      * @return SpotifyTrackData instance, or null if nothing is playing or not authenticated.
      */
     public SpotifyTrackData getCurrentTrackData() {
+        CurrentlyPlayingContext context = getPlaybackContext();
+        if (context != null && context.getItem() != null) {
+            return extractTrackData(context);
+        }
+
         CurrentlyPlaying currentlyPlaying = getCurrentlyPlaying();
         return extractTrackData(currentlyPlaying);
+    }
+
+    /**
+     * Extracts structured {@link SpotifyTrackData} from a {@link CurrentlyPlayingContext} object.
+     *
+     * @param context Playback context from Spotify API.
+     * @return Parsed SpotifyTrackData, or null if context is null or no item is active.
+     */
+    public SpotifyTrackData extractTrackData(CurrentlyPlayingContext context) {
+        if (context == null || context.getItem() == null) {
+            return null;
+        }
+
+        String songName = getSongNameFromItem(context.getItem());
+        String artistName = getArtistNameFromItem(context.getItem());
+        List<String> artists = getArtistNamesFromItem(context.getItem());
+        String albumName = getAlbumNameFromItem(context.getItem());
+        String coverUrl = getAlbumCoverUrlFromItem(context.getItem());
+        List<String> coverUrls = getAlbumCoverUrlsFromItem(context.getItem());
+        boolean isPlaying = context.getIs_playing() != null && context.getIs_playing();
+
+        String deviceName = "Raspberry Pi Speaker";
+        if (context.getDevice() != null && context.getDevice().getName() != null && !context.getDevice().getName().isBlank()) {
+            deviceName = context.getDevice().getName();
+        }
+
+        return new SpotifyTrackData(
+                songName,
+                artistName,
+                artists,
+                albumName,
+                coverUrl,
+                coverUrls,
+                isPlaying,
+                deviceName
+        );
     }
 
     /**
@@ -249,15 +321,13 @@ public class SpotifyService {
             return null;
         }
 
-        String songName = getSongName(currentlyPlaying);
-        String artistName = getArtistName(currentlyPlaying);
-        List<String> artists = getArtistNames(currentlyPlaying);
-        String albumName = getAlbumName(currentlyPlaying);
-        String coverUrl = getAlbumCoverUrl(currentlyPlaying);
-        List<String> coverUrls = getAlbumCoverUrls(currentlyPlaying);
+        String songName = getSongNameFromItem(currentlyPlaying.getItem());
+        String artistName = getArtistNameFromItem(currentlyPlaying.getItem());
+        List<String> artists = getArtistNamesFromItem(currentlyPlaying.getItem());
+        String albumName = getAlbumNameFromItem(currentlyPlaying.getItem());
+        String coverUrl = getAlbumCoverUrlFromItem(currentlyPlaying.getItem());
+        List<String> coverUrls = getAlbumCoverUrlsFromItem(currentlyPlaying.getItem());
         boolean isPlaying = currentlyPlaying.getIs_playing() != null && currentlyPlaying.getIs_playing();
-        int progressMs = currentlyPlaying.getProgress_ms() != null ? currentlyPlaying.getProgress_ms() : 0;
-        int durationMs = getDurationMs(currentlyPlaying);
 
         return new SpotifyTrackData(
                 songName,
@@ -267,8 +337,7 @@ public class SpotifyService {
                 coverUrl,
                 coverUrls,
                 isPlaying,
-                progressMs,
-                durationMs
+                "Raspberry Pi Speaker"
         );
     }
 
@@ -278,23 +347,32 @@ public class SpotifyService {
 
     /**
      * Extracts the song / track name from a {@link CurrentlyPlaying} object.
-     * Supports both musical tracks and podcast episodes.
      *
      * @param currentlyPlaying Currently playing track object.
      * @return Song name, episode name, or empty string if not available.
      */
     public String getSongName(CurrentlyPlaying currentlyPlaying) {
-        if (currentlyPlaying == null || currentlyPlaying.getItem() == null) {
+        if (currentlyPlaying == null) {
             return "";
         }
+        return getSongNameFromItem(currentlyPlaying.getItem());
+    }
 
-        IPlaylistItem item = currentlyPlaying.getItem();
+    /**
+     * Extracts the song / track name from a playlist item (Track or Episode).
+     *
+     * @param item Track or Episode item.
+     * @return Song name or empty string.
+     */
+    public String getSongNameFromItem(IPlaylistItem item) {
+        if (item == null) {
+            return "";
+        }
         if (item instanceof Track track) {
             return track.getName() != null ? track.getName() : "Unknown Title";
         } else if (item instanceof Episode episode) {
             return episode.getName() != null ? episode.getName() : "Unknown Episode";
         }
-
         return "";
     }
 
@@ -313,14 +391,25 @@ public class SpotifyService {
 
     /**
      * Extracts the formatted artist name(s) from a {@link CurrentlyPlaying} object.
-     * If multiple artists are present, they are joined with a comma (e.g. "Daft Punk, Pharrell Williams").
-     * For podcasts, returns the show / publisher name.
      *
      * @param currentlyPlaying Currently playing track object.
      * @return Formatted artist name(s), or empty string if not available.
      */
     public String getArtistName(CurrentlyPlaying currentlyPlaying) {
-        List<String> artists = getArtistNames(currentlyPlaying);
+        if (currentlyPlaying == null) {
+            return "";
+        }
+        return getArtistNameFromItem(currentlyPlaying.getItem());
+    }
+
+    /**
+     * Extracts the formatted artist name(s) from a playlist item.
+     *
+     * @param item Track or Episode item.
+     * @return Formatted artist name(s).
+     */
+    public String getArtistNameFromItem(IPlaylistItem item) {
+        List<String> artists = getArtistNamesFromItem(item);
         if (artists.isEmpty()) {
             return "";
         }
@@ -345,11 +434,23 @@ public class SpotifyService {
      * @return List of artist names, or empty list if not available.
      */
     public List<String> getArtistNames(CurrentlyPlaying currentlyPlaying) {
-        if (currentlyPlaying == null || currentlyPlaying.getItem() == null) {
+        if (currentlyPlaying == null) {
+            return Collections.emptyList();
+        }
+        return getArtistNamesFromItem(currentlyPlaying.getItem());
+    }
+
+    /**
+     * Extracts the list of all artist names from a playlist item.
+     *
+     * @param item Track or Episode item.
+     * @return List of artist names.
+     */
+    public List<String> getArtistNamesFromItem(IPlaylistItem item) {
+        if (item == null) {
             return Collections.emptyList();
         }
 
-        IPlaylistItem item = currentlyPlaying.getItem();
         if (item instanceof Track track) {
             if (track.getArtists() == null || track.getArtists().length == 0) {
                 return List.of("Unknown Artist");
@@ -383,13 +484,25 @@ public class SpotifyService {
 
     /**
      * Extracts the best album cover art image URL for display on the smart assistant screen.
-     * Prefers medium-sized images (typically 300x300) to balance visual quality and RAM/CPU usage on Raspberry Pi 3.
      *
      * @param currentlyPlaying Currently playing track object.
      * @return Image URL string, or empty string if no image is available.
      */
     public String getAlbumCoverUrl(CurrentlyPlaying currentlyPlaying) {
-        return getAlbumCoverUrlBySize(currentlyPlaying, ImageSizePreference.MEDIUM);
+        if (currentlyPlaying == null) {
+            return "";
+        }
+        return getAlbumCoverUrlFromItem(currentlyPlaying.getItem());
+    }
+
+    /**
+     * Extracts album cover image URL from a playlist item.
+     *
+     * @param item Track or Episode item.
+     * @return Image URL string.
+     */
+    public String getAlbumCoverUrlFromItem(IPlaylistItem item) {
+        return getAlbumCoverUrlBySizeFromItem(item, ImageSizePreference.MEDIUM);
     }
 
     /**
@@ -400,7 +513,21 @@ public class SpotifyService {
      * @return Image URL string, or empty string if not available.
      */
     public String getAlbumCoverUrlBySize(CurrentlyPlaying currentlyPlaying, ImageSizePreference preference) {
-        Image[] images = getRawImages(currentlyPlaying);
+        if (currentlyPlaying == null) {
+            return "";
+        }
+        return getAlbumCoverUrlBySizeFromItem(currentlyPlaying.getItem(), preference);
+    }
+
+    /**
+     * Extracts an album cover image URL from a playlist item by size preference.
+     *
+     * @param item       Track or Episode item.
+     * @param preference Size preference.
+     * @return Image URL string.
+     */
+    public String getAlbumCoverUrlBySizeFromItem(IPlaylistItem item, ImageSizePreference preference) {
+        Image[] images = getRawImages(item);
         if (images == null || images.length == 0) {
             return "";
         }
@@ -409,8 +536,6 @@ public class SpotifyService {
             preference = ImageSizePreference.MEDIUM;
         }
 
-        // Spotify usually returns images sorted descending by size:
-        // [0] = 640x640, [1] = 300x300, [2] = 64x64
         switch (preference) {
             case LARGE:
                 return images[0].getUrl() != null ? images[0].getUrl() : "";
@@ -432,7 +557,20 @@ public class SpotifyService {
      * @return List of image URLs, or empty list if not available.
      */
     public List<String> getAlbumCoverUrls(CurrentlyPlaying currentlyPlaying) {
-        Image[] images = getRawImages(currentlyPlaying);
+        if (currentlyPlaying == null) {
+            return Collections.emptyList();
+        }
+        return getAlbumCoverUrlsFromItem(currentlyPlaying.getItem());
+    }
+
+    /**
+     * Extracts all available cover art image URLs from a playlist item.
+     *
+     * @param item Track or Episode item.
+     * @return List of image URLs.
+     */
+    public List<String> getAlbumCoverUrlsFromItem(IPlaylistItem item) {
+        Image[] images = getRawImages(item);
         if (images == null || images.length == 0) {
             return Collections.emptyList();
         }
@@ -462,11 +600,23 @@ public class SpotifyService {
      * @return Album name, or empty string if not available.
      */
     public String getAlbumName(CurrentlyPlaying currentlyPlaying) {
-        if (currentlyPlaying == null || currentlyPlaying.getItem() == null) {
+        if (currentlyPlaying == null) {
+            return "";
+        }
+        return getAlbumNameFromItem(currentlyPlaying.getItem());
+    }
+
+    /**
+     * Extracts the album name from a playlist item.
+     *
+     * @param item Track or Episode item.
+     * @return Album name, or empty string if not available.
+     */
+    public String getAlbumNameFromItem(IPlaylistItem item) {
+        if (item == null) {
             return "";
         }
 
-        IPlaylistItem item = currentlyPlaying.getItem();
         if (item instanceof Track track) {
             AlbumSimplified album = track.getAlbum();
             return album != null && album.getName() != null ? album.getName() : "";
@@ -478,35 +628,13 @@ public class SpotifyService {
     }
 
     /**
-     * Extracts total track duration in milliseconds.
-     *
-     * @param currentlyPlaying Currently playing track object.
-     * @return Duration in milliseconds, or 0 if not available.
-     */
-    public int getDurationMs(CurrentlyPlaying currentlyPlaying) {
-        if (currentlyPlaying == null || currentlyPlaying.getItem() == null) {
-            return 0;
-        }
-
-        IPlaylistItem item = currentlyPlaying.getItem();
-        if (item instanceof Track track) {
-            return track.getDurationMs() != null ? track.getDurationMs() : 0;
-        } else if (item instanceof Episode episode) {
-            return episode.getDurationMs() != null ? episode.getDurationMs() : 0;
-        }
-
-        return 0;
-    }
-
-    /**
      * Helper method to extract raw Image array from either Track album or Episode.
      */
-    private Image[] getRawImages(CurrentlyPlaying currentlyPlaying) {
-        if (currentlyPlaying == null || currentlyPlaying.getItem() == null) {
+    private Image[] getRawImages(IPlaylistItem item) {
+        if (item == null) {
             return null;
         }
 
-        IPlaylistItem item = currentlyPlaying.getItem();
         if (item instanceof Track track) {
             AlbumSimplified album = track.getAlbum();
             if (album != null && album.getImages() != null) {
