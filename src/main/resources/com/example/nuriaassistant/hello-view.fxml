@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <?import javafx.scene.control.Label?>
+<?import javafx.scene.image.ImageView?>
 <?import javafx.scene.layout.AnchorPane?>
+<?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.VBox?>
 
 <AnchorPane xmlns:fx="http://javafx.com/fxml"
@@ -9,7 +11,7 @@
             prefWidth="1024.0" prefHeight="600.0"
             style="-fx-background-color: #000000;">
 
-    <!-- Widget Reloj y Clima -->
+    <!-- Clock and Weather Widget -->
     <VBox fx:id="infoWidget" spacing="5.0"
           AnchorPane.topAnchor="20.0"
           AnchorPane.leftAnchor="20.0">
@@ -30,5 +32,40 @@
            AnchorPane.rightAnchor="20.0"
            alignment="CENTER"
            wrapText="true"/>
+
+    <!-- Spotify Widget -->
+    <VBox fx:id="spotifyWidget" spacing="8.0"
+          AnchorPane.topAnchor="20.0"
+          AnchorPane.rightAnchor="20.0"
+          prefWidth="380.0"
+          style="-fx-background-color: rgba(25, 25, 25, 0.85); -fx-background-radius: 12px; -fx-padding: 15px;">
+
+        <Label fx:id="spotifyStatusLabel"
+               text="Spotify: Initializing..."
+               style="-fx-text-fill: #1DB954; -fx-font-size: 14px; -fx-font-weight: bold;"/>
+
+        <HBox spacing="12.0" alignment="CENTER_LEFT">
+            <ImageView fx:id="spotifyCoverArtView"
+                       fitWidth="100.0" fitHeight="100.0"
+                       preserveRatio="true"
+                       smooth="true"/>
+
+            <VBox spacing="4.0" HBox.hgrow="ALWAYS">
+                <Label fx:id="spotifySongNameLabel"
+                       text="No track playing"
+                       wrapText="true"
+                       style="-fx-text-fill: white; -fx-font-size: 18px; -fx-font-weight: bold;"/>
+
+                <Label fx:id="spotifyArtistNameLabel"
+                       text=""
+                       wrapText="true"
+                       style="-fx-text-fill: #b3b3b3; -fx-font-size: 14px;"/>
+
+                <Label fx:id="spotifyProgressLabel"
+                       text=""
+                       style="-fx-text-fill: #888888; -fx-font-size: 12px;"/>
+            </VBox>
+        </HBox>
+    </VBox>
 
 </AnchorPane>

@@ -4,8 +4,13 @@ module com.example.nuriaassistant {
     requires java.net.http;
     requires jdk.httpserver;
     requires se.michaelthelin.spotify;
+    requires org.apache.httpcomponents.core5.httpcore5;
 
 
     opens com.example.nuriaassistant to javafx.fxml;
     exports com.example.nuriaassistant;
+    exports com.example.nuriaassistant.models;
+    exports com.example.nuriaassistant.spotify;
+    exports com.example.nuriaassistant.services;
+    exports com.example.nuriaassistant.config;
 }

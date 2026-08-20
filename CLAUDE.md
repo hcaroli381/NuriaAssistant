@@ -43,6 +43,9 @@ The system operates as an "always-on" smart assistant (similar to an Echo Show) 
 - **Approach:** The Raspberry Pi acts as a Spotify Connect device (using `librespot` or `Raspotify`).
 - **UI:** The JavaFX application displays track metadata (title, artist, cover art) by polling the Spotify API/local Spotify Connect status.
 - **Constraint:** Do not attempt full music control or search within the JavaFX UI. Use the Spotify mobile app/PC client as the primary controller.
+- **Authentication:** OAuth2 is required. 
+    - Redirect URI: `http://127.0.0.1:8888/callback`
+    - Client ID and Client Secret must be configured as environment variables.
 
 ## Environment Configuration
 
