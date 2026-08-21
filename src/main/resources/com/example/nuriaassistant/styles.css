@@ -152,3 +152,88 @@
     -fx-font-size: 16px;
     -fx-font-weight: 500;
 }
+
+/* --------------------------------------------------------------------------
+   Voice Assistant Overlay (Orb + Conversation Card)
+   Colors mirror the backend LED ring semantics:
+   idle=sky-blue, listening=green, processing=amber, speaking=purple, error=red
+   -------------------------------------------------------------------------- */
+.voice-orb {
+    -fx-background-color: rgba(56, 189, 248, 0.15);
+    -fx-border-color: rgba(56, 189, 248, 0.55);
+    -fx-background-radius: 34px;
+    -fx-border-radius: 34px;
+    -fx-border-width: 1.5px;
+    -fx-padding: 18px 20px;
+    -fx-cursor: hand;
+}
+
+.voice-orb:hover {
+    -fx-background-color: rgba(56, 189, 248, 0.28);
+}
+
+.voice-orb-muted {
+    -fx-background-color: rgba(148, 163, 184, 0.12);
+    -fx-border-color: rgba(239, 68, 68, 0.6);
+    -fx-background-radius: 34px;
+    -fx-border-radius: 34px;
+}
+
+.voice-card {
+    -fx-background-color: rgba(10, 25, 47, 0.85);
+    -fx-border-color: rgba(148, 163, 184, 0.25);
+    -fx-background-radius: 22px;
+    -fx-border-radius: 22px;
+    -fx-border-width: 1px;
+    -fx-padding: 18px 26px;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.6), 24, 0, 0, 8);
+}
+
+.voice-status-text {
+    -fx-text-fill: #e2e8f0;
+    -fx-font-size: 20px;
+    -fx-font-weight: bold;
+}
+
+.voice-thinking-dot {
+    -fx-text-fill: #f59e0b;
+    -fx-font-size: 14px;
+}
+
+.voice-bubble-user {
+    -fx-background-color: rgba(56, 189, 248, 0.16);
+    -fx-border-color: rgba(56, 189, 248, 0.4);
+    -fx-background-radius: 16px;
+    -fx-border-radius: 16px;
+    -fx-border-width: 1px;
+    -fx-padding: 10px 16px;
+}
+
+.voice-bubble-user-author {
+    -fx-text-fill: #38bdf8;
+    -fx-font-size: 11px;
+    -fx-font-weight: 800;
+    -fx-letter-spacing: 2px;
+}
+
+.voice-bubble-nuria {
+    -fx-background-color: rgba(168, 85, 247, 0.16);
+    -fx-border-color: rgba(168, 85, 247, 0.4);
+    -fx-background-radius: 16px;
+    -fx-border-radius: 16px;
+    -fx-border-width: 1px;
+    -fx-padding: 10px 16px;
+}
+
+.voice-bubble-nuria-author {
+    -fx-text-fill: #c084fc;
+    -fx-font-size: 11px;
+    -fx-font-weight: 800;
+    -fx-letter-spacing: 2px;
+}
+
+.voice-bubble-text {
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 19px;
+    -fx-font-weight: 500;
+}

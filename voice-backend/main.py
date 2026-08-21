@@ -17,11 +17,15 @@ from typing import Any
 import httpx
 import numpy as np
 import sounddevice as sd
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from openwakeword.model import Model as OpenWakeWordModel
 from openwakeword.utils import download_models as openwakeword_download_models
 from pydantic import BaseModel, Field
 from vosk import KaldiRecognizer, Model as VoskModel
+
+# Load .env from the backend directory regardless of the launch CWD.
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 
 def _env(key: str, default: str) -> str:
@@ -52,6 +56,8 @@ class Settings:
     silence_seconds: float = _env_float("VOICE_SILENCE_SECONDS", 1.2)
     min_speech_seconds: float = _env_float("VOICE_MIN_SPEECH_SECONDS", 0.7)
     max_speech_seconds: float = _env_float("VOICE_MAX_SPEECH_SECONDS", 8.0)
+    pre_speech_timeout_seconds: float = _env_float("VOICE_PRE_SPEECH_TIMEOUT_SECONDS", 2.5)
+    post_reply_flush_seconds: float = _env_float("VOICE_POST_REPLY_FLUSH_SECONDS", 0.8)
     wake_cooldown_seconds: float = _env_float("VOICE_WAKE_COOLDOWN_SECONDS", 2.5)
 
     wakeword_model_path: str = _env("VOICE_WAKEWORD_MODEL_PATH", "")
@@ -76,6 +82,17 @@ class Settings:
     led_pin: int = _env_int("LED_PIN", 18)
     led_count: int = _env_int("LED_COUNT", 12)
     led_brightness: int = _env_int("LED_BRIGHTNESS", 80)
+
+    def __post_init__(self) -> None:
+        # Anchor relative model paths to this file's directory so the same
+        # .env works no matter where uvicorn is launched from.
+        base = Path(__file__).resolve().parent
+        for name in ("wakeword_model_path", "vosk_model_path", "piper_model_path"):
+            value = getattr(self, name)
+            if value:
+                path = Path(value).expanduser()
+                if not path.is_absolute():
+                    setattr(self, name, str(base / path))
 
 
 class AssistantState(str, Enum):
@@ -255,10 +272,18 @@ class VoiceAssistantRuntime:
                         if transcript:
                             try:
                                 self._process_text(transcript)
+                                # Discard buffered audio (incl. TTS echo) so the
+                                # assistant does not listen to its own voice.
+                                self._drain_audio(stream, self.settings.post_reply_flush_seconds)
                             except Exception as exc:
                                 self._set_state(AssistantState.error, last_error=f"Processing error: {exc}")
         except Exception as exc:
             self._set_state(AssistantState.error, running=False, last_error=str(exc))
+
+    def _drain_audio(self, stream: sd.RawInputStream, seconds: float) -> None:
+        deadline = time.monotonic() + seconds
+        while not self._stop_event.is_set() and time.monotonic() < deadline:
+            stream.read(self.settings.block_size)
 
     def _wakeword_score(self, audio_np: np.ndarray) -> tuple[str, float]:
         prediction = self._model.predict(audio_np)
@@ -304,6 +329,9 @@ class VoiceAssistantRuntime:
                 last_voice_at = now
 
             duration = now - speech_started_at
+            if not started and duration >= self.settings.pre_speech_timeout_seconds:
+                # Wake word fired but nobody spoke: return to idle quickly.
+                break
             if started and (now - last_voice_at) >= silence_limit:
                 break
             if duration >= self.settings.max_speech_seconds:

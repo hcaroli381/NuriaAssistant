@@ -179,4 +179,81 @@
         </VBox>
     </StackPane>
 
+    <!-- Voice Assistant Overlay (Topmost: ambient orb + expandable conversation card) -->
+    <AnchorPane fx:id="voiceOverlayLayer"
+                visible="false"
+                AnchorPane.topAnchor="0.0" AnchorPane.bottomAnchor="0.0"
+                AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0">
+
+        <!-- Ambient Mic Orb / Mute Button (Collapsed state, top-right corner) -->
+        <HBox fx:id="voiceOrb" alignment="CENTER" spacing="8.0"
+              styleClass="voice-orb"
+              onMouseClicked="#toggleVoiceMute"
+              AnchorPane.topAnchor="26.0"
+              AnchorPane.rightAnchor="30.0">
+            <SVGPath fx:id="voiceMicIcon"
+                     content="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"
+                     fill="#38bdf8" scaleX="1.5" scaleY="1.5"/>
+            <SVGPath fx:id="voiceMicOffIcon"
+                     visible="false"
+                     content="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"
+                     fill="#94a3b8" scaleX="1.5" scaleY="1.5"/>
+        </HBox>
+
+        <!-- Conversation Card (Expanded state, rises from bottom center) -->
+        <HBox alignment="CENTER"
+              AnchorPane.bottomAnchor="30.0"
+              AnchorPane.leftAnchor="140.0"
+              AnchorPane.rightAnchor="140.0">
+
+            <VBox fx:id="voiceCard"
+                  visible="false" opacity="0.0"
+                  alignment="CENTER_LEFT" spacing="10.0"
+                  maxWidth="700.0"
+                  styleClass="voice-card">
+
+                <!-- Status Row: Mic Icon + State Text + Thinking Dots -->
+                <HBox alignment="CENTER_LEFT" spacing="10.0">
+                    <SVGPath fx:id="voiceCardMicIcon"
+                             content="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"
+                             fill="#22c55e"/>
+                    <Label fx:id="voiceStatusLabel"
+                           text="Lista"
+                           styleClass="voice-status-text"/>
+                    <HBox fx:id="voiceDotsRow" alignment="CENTER_LEFT" spacing="4.0" visible="false">
+                        <Label fx:id="voiceDot1" text="&#9679;" styleClass="voice-thinking-dot"/>
+                        <Label fx:id="voiceDot2" text="&#9679;" styleClass="voice-thinking-dot"/>
+                        <Label fx:id="voiceDot3" text="&#9679;" styleClass="voice-thinking-dot"/>
+                    </HBox>
+                </HBox>
+
+                <!-- User Transcript Bubble -->
+                <VBox fx:id="voiceTranscriptBubble"
+                      visible="false"
+                      alignment="CENTER_LEFT" spacing="2.0"
+                      maxWidth="650.0"
+                      styleClass="voice-bubble-user">
+                    <Label text="T&#218;" styleClass="voice-bubble-user-author"/>
+                    <Label fx:id="voiceTranscriptLabel"
+                           text=""
+                           wrapText="true"
+                           styleClass="voice-bubble-text"/>
+                </VBox>
+
+                <!-- Nuria Reply Bubble -->
+                <VBox fx:id="voiceReplyBubble"
+                      visible="false"
+                      alignment="CENTER_LEFT" spacing="2.0"
+                      maxWidth="650.0"
+                      styleClass="voice-bubble-nuria">
+                    <Label text="NURIA" styleClass="voice-bubble-nuria-author"/>
+                    <Label fx:id="voiceReplyLabel"
+                           text=""
+                           wrapText="true"
+                           styleClass="voice-bubble-text"/>
+                </VBox>
+            </VBox>
+        </HBox>
+    </AnchorPane>
+
 </AnchorPane>

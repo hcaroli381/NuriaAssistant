@@ -23,6 +23,13 @@ The system operates as an "always-on" smart assistant (similar to an Echo Show) 
    - Sends confirmation reply back to the Telegram chat when the message is displayed on screen.
 6. **Weather Service (`WeatherService`):**
    - Fetches current weather data from OpenWeatherMap API for the configured city.
+7. **Voice Assistant Front-End (`VoiceAssistantService`):**
+   - Live UI mirror of the Python voice backend, polled every second on a dedicated daemon thread.
+   - Ambient mic orb (top-right, doubles as touch mute button) + expandable glassmorphic conversation card.
+   - Colors mirror the backend LED ring semantics: sky-blue idle, green listening, amber processing, purple speaking, red error.
+   - Auto-starts the backend runtime when port 8090 is reachable; auto-start is suppressed while muted (15s retry throttle).
+   - Fully hidden while Spotify full-screen mode is active (assistant keeps running, nothing renders).
+   - Performance-first for Pi 3: change-deduplicated state machine, animations created once and reused, transform/opacity only, 5s poll backoff when the backend is unreachable.
 
 ## Remote Messaging System (Telegram & HTTP API)
 
@@ -94,6 +101,9 @@ print(response.text)
 - `src/main/java/com/example/nuriaassistant/spotify/SpotifyService.java`: Spotify Web API & OAuth2 integration.
 - `src/main/java/com/example/nuriaassistant/services/WeatherService.java`: OpenWeatherMap client.
 - `src/main/java/com/example/nuriaassistant/services/NotificationServer.java`: HTTP server for remote push notifications.
+- `src/main/java/com/example/nuriaassistant/services/VoiceAssistantService.java`: HTTP client for the voice backend (state polling, start/stop, zero-dependency JSON parsing).
+- `src/main/java/com/example/nuriaassistant/models/VoiceAssistantSnapshot.java`: Immutable record of the backend runtime state.
+- `deploy/`: systemd units (`nuria-voice.service`, `nuria-assistant.service`) + `install.sh` for boot-on-power kiosk deployment.
 
 ## Spotify/Media Integration
 
@@ -114,6 +124,7 @@ print(response.text)
   - `SPOTIFY_REDIRECT_URI`: OAuth callback URI (default `http://127.0.0.1:8888/callback`).
   - `TELEGRAM_BOT_TOKEN`: Telegram bot token for remote messaging.
   - `TELEGRAM_ALLOWED_CHAT_ID`: (Optional) Restrict Telegram bot to a single chat ID.
+  - `VOICE_BACKEND_URL`: Base URL of the Python voice backend (default `http://127.0.0.1:8090`).
 
 ## Voice Assistant Backend (Python on Raspberry Pi)
 
@@ -147,6 +158,25 @@ The backend can emit/execute structured actions:
 - `voice-backend/main.py`: FastAPI app + wake word/STT/LLM/TTS runtime loop.
 - `voice-backend/.env.example`: Runtime configuration template.
 - `voice-backend/requirements.txt`: Python dependencies.
+- `voice-backend/models/`: Downloaded models (gitignored): `vosk/vosk-model-small-es-0.42`, `hey_jarvis_v0.1.onnx`, `piper/es_ES-davefx-medium.onnx`.
+
+### Backend runtime behavior
+
+- `.env` is loaded via `python-dotenv` relative to `main.py` itself, so uvicorn can be launched from any working directory.
+- Relative model paths (`VOSK_MODEL_PATH`, `PIPER_MODEL_PATH`, `VOICE_WAKEWORD_MODEL_PATH`) are resolved against the backend directory, keeping the same `.env` portable across machines.
+- **Pre-speech timeout** (`VOICE_PRE_SPEECH_TIMEOUT_SECONDS`, default 2.5s): if the wake word fires but nobody starts speaking, capture ends and the runtime returns to idle instead of waiting the full 8s speech window.
+- **Post-reply echo flush** (`VOICE_POST_REPLY_FLUSH_SECONDS`, default 0.8s): buffered mic audio (which contains the TTS echo of Nuria's own voice) is discarded after every answer to prevent self-triggered listening cycles.
+- Muting from the front-end simply calls `POST /assistant/stop` (mic off, models stay loaded); unmuting calls `/assistant/start`. The JavaFX auto-start never fights a manual mute.
+
+### Boot-on-power deployment (Raspberry Pi)
+
+```bash
+cd deploy && ./install.sh $USER          # renders placeholders and installs both systemd units
+```
+
+- `nuria-voice.service`: backend at boot, `Restart=always` (5s backoff), bound to `0.0.0.0:8090`.
+- `nuria-assistant.service`: waits for X display `:0` (XWayland on Pi OS Bookworm), then runs `./mvnw javafx:run`; requires the voice service.
+- The JavaFX app auto-starts the runtime loop once the backend answers `/assistant/state`, so no manual step is needed after power-on.
 
 ### Voice troubleshooting
 
@@ -154,3 +184,4 @@ The backend can emit/execute structured actions:
 - Start microphone loop: `curl -X POST http://127.0.0.1:8090/assistant/start`
 - Inspect wake/transcription state: `curl http://127.0.0.1:8090/assistant/state`
 - If Piper is missing, install `piper-tts` in the backend venv and set `PIPER_BIN` to the venv executable. The fallback `espeak-ng` is functional but sounds more robotic.
+- If the assistant "keeps listening" in noisy rooms (music playing), raise `VOICE_RMS_THRESHOLD` (e.g., 800–1200).

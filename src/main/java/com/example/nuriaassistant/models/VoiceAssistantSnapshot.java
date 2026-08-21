@@ -1,0 +1,58 @@
+package com.example.nuriaassistant.models;
+
+/**
+ * Immutable snapshot of the Python voice backend runtime state
+ * (GET /assistant/state on port 8090).
+ */
+public record VoiceAssistantSnapshot(
+        String state,
+        double wakeWordScore,
+        String lastTranscript,
+        String lastReply,
+        String lastError,
+        boolean running,
+        boolean offline
+) {
+    public VoiceAssistantSnapshot {
+        if (state == null || state.isBlank()) {
+            state = "stopped";
+        }
+        if (lastTranscript == null) {
+            lastTranscript = "";
+        }
+        if (lastReply == null) {
+            lastReply = "";
+        }
+        if (lastError == null) {
+            lastError = "";
+        }
+    }
+
+    public static VoiceAssistantSnapshot offlineSnapshot() {
+        return new VoiceAssistantSnapshot("offline", 0.0, "", "", "", false, true);
+    }
+
+    public boolean isListening() {
+        return "listening".equals(state);
+    }
+
+    public boolean isProcessing() {
+        return "processing".equals(state);
+    }
+
+    public boolean isSpeaking() {
+        return "speaking".equals(state);
+    }
+
+    public boolean isIdle() {
+        return "idle".equals(state);
+    }
+
+    public boolean isError() {
+        return "error".equals(state);
+    }
+
+    public boolean isActive() {
+        return isListening() || isProcessing() || isSpeaking();
+    }
+}
