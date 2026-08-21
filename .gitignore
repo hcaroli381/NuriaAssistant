@@ -45,6 +45,7 @@ voice-backend/__pycache__/
 voice-backend/**/*.pyc
 voice-backend/runtime/
 voice-backend/.env
+src/main/resources/config.properties
 
 ### Local credentials and downloaded voice models ###
 *.env

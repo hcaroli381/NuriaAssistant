@@ -1,0 +1,10 @@
+# Copy this file to config.properties and add your local credentials.
+OPENWEATHER_API_KEY=
+OPENWEATHER_CITY=Granada,ES
+
+SPOTIFY_CLIENT_ID=
+SPOTIFY_CLIENT_SECRET=
+SPOTIFY_REDIRECT_URI=http://127.0.0.1:8888/callback
+
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_ALLOWED_CHAT_ID=
