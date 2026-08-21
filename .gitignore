@@ -37,3 +37,11 @@ build/
 
 ### Mac OS ###
 .DS_Store
+
+### Python voice backend ###
+.venv/
+voice-backend/.venv/
+voice-backend/__pycache__/
+voice-backend/**/*.pyc
+voice-backend/runtime/
+voice-backend/.env

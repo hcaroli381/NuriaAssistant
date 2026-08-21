@@ -21,17 +21,6 @@
                 AnchorPane.topAnchor="0.0" AnchorPane.bottomAnchor="0.0"
                 AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0">
 
-        <!-- Top-Right: Gemini Voice Assistant Button (Touch or Hands-Free) -->
-        <HBox fx:id="voiceTouchButton"
-              alignment="CENTER" spacing="8.0"
-              onMouseClicked="#onVoiceButtonClicked"
-              styleClass="voice-touch-btn"
-              AnchorPane.topAnchor="35.0"
-              AnchorPane.rightAnchor="45.0">
-            <Label text="✨" style="-fx-font-size: 16px;"/>
-            <Label fx:id="voiceButtonText" text="Gemini Voice" styleClass="voice-touch-btn-text"/>
-        </HBox>
-
         <!-- Top-Left Main Info Block: Time, Date, Weather & Temperature -->
         <VBox alignment="TOP_LEFT" spacing="6.0"
               AnchorPane.topAnchor="40.0"
@@ -69,32 +58,6 @@
                        text="Granada"
                        styleClass="minimal-weather-city"/>
             </HBox>
-        </VBox>
-
-        <!-- Voice Assistant Modal Card (Activated hands-free or via touch button) -->
-        <VBox fx:id="voiceAssistantLayer"
-              visible="false" opacity="0.0"
-              alignment="TOP_LEFT" spacing="12.0"
-              styleClass="voice-card"
-              prefWidth="520.0"
-              AnchorPane.topAnchor="180.0"
-              AnchorPane.leftAnchor="48.0">
-
-            <HBox alignment="CENTER_LEFT" spacing="10.0">
-                <Label text="✨" style="-fx-font-size: 18px;"/>
-                <Label fx:id="voiceStatusLabel"
-                       text="Escuchando..."
-                       styleClass="voice-status-label"/>
-                <HBox HBox.hgrow="ALWAYS"/>
-                <Label text="✕"
-                       onMouseClicked="#dismissVoiceAssistant"
-                       styleClass="notification-close-btn"/>
-            </HBox>
-
-            <Label fx:id="voiceResponseLabel"
-                   text="..."
-                   styleClass="voice-response-text"
-                   wrapText="true"/>
         </VBox>
 
         <!-- Notification Banner at Bottom (Sticky Note - Persists until tapped or cleared via Telegram) -->

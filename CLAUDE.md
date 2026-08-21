@@ -112,49 +112,45 @@ print(response.text)
   - `SPOTIFY_CLIENT_ID`: Spotify developer application Client ID.
   - `SPOTIFY_CLIENT_SECRET`: Spotify developer application Client Secret.
   - `SPOTIFY_REDIRECT_URI`: OAuth callback URI (default `http://127.0.0.1:8888/callback`).
-  - `GEMINI_API_KEY`: Google Gemini API key for the voice assistant and text queries.
   - `TELEGRAM_BOT_TOKEN`: Telegram bot token for remote messaging.
   - `TELEGRAM_ALLOWED_CHAT_ID`: (Optional) Restrict Telegram bot to a single chat ID.
 
-## Gemini Voice Assistant (`VoiceAssistantService`)
+## Voice Assistant Backend (Python on Raspberry Pi)
 
-### Overview
+The JavaFX app currently focuses on display/orchestration. Voice runs in `voice-backend/` as a separate FastAPI service:
 
-The voice assistant captures microphone audio and sends it to the Gemini API (with Google Search grounding). It supports two interaction modes:
+1. `openWakeWord` for continuous wake-word detection.
+2. `Vosk` offline STT using the Spanish small model.
+3. Groq OpenAI-compatible chat completion as the LLM backend.
+4. `Piper` for offline neural TTS playback.
 
-1. **Hands-free VAD mode** — Automatically detects speech via energy threshold (RMS > 800.0). After 1.4 s of silence it stops capturing and sends the audio to Gemini.
-2. **Manual (button toggle) mode** — The on-screen "Gemini Voice" button works as a toggle:
-   - **1st press:** starts recording → button label changes to `"Detener 🔴"`, popup shows `"🎙️ Escuchando..."`.
-   - **2nd press:** stops recording → audio is sent to Gemini for processing.
+Current working configuration:
+- Wake word: `hey_jarvis` using an explicit ONNX model path.
+- Groq model: `groq/compound-mini`, which can perform built-in web search for current questions without Google APIs or a browser.
+- TTS: Piper Spanish neural voice (`es_ES-davefx-medium.onnx`); `espeak-ng` is only a fallback when the Piper executable is unavailable.
+- The runtime listens only after `POST /assistant/start`.
 
-### State machine
+### Security model
 
-```
-IDLE ──(speech detected / button pressed)──► LISTENING
-LISTENING ──(silence timeout / button pressed again)──► PROCESSING
-PROCESSING ──(Gemini response received)──► IDLE
-```
+- Keep `GROQ_API_KEY` only in the backend process environment.
+- Do not place LLM keys in Java client files, FXML, or front-end code.
 
-### Key fields in `VoiceAssistantService`
+### Backend tool actions
 
-| Field | Type | Purpose |
-|---|---|---|
-| `isManualRecording` | `AtomicBoolean` | True while the user is recording via button toggle |
-| `forceFinalize` | `AtomicBoolean` | Set to `true` by the second button press to signal the listen loop to process the buffer |
-| `manualSpeechBuffer` | `ByteArrayOutputStream` | Accumulates PCM audio during manual recording (separate from the VAD buffer) |
-| `SPEECH_ENERGY_THRESHOLD` | `double` | RMS level above which audio is considered speech (default `800.0`) |
-| `SILENCE_THRESHOLD_MS` | `int` | Milliseconds of silence before VAD mode finalises a phrase (default `1400 ms`) |
+The backend can emit/execute structured actions:
+- `get_time`
+- `send_message` (uses existing local `NotificationServer` `/notify`)
+- `spotify_play` / `spotify_pause` (shell commands configured via env)
 
-### Important design decisions
+### Backend files
 
-- **Manual and VAD buffers are separate.** `manualSpeechBuffer` is used exclusively for button-toggle mode; `speechBuffer` (local to `listenLoop`) is used for hands-free VAD. This prevents cross-contamination between the two modes.
-- **Minimum audio length check.** Audio shorter than ~25 000 bytes (~0.8 s at 16 kHz/16-bit mono) is discarded and the state returns to `IDLE` without calling Gemini, to avoid sending noise.
-- **Audio format:** 16 kHz, 16-bit, Mono, Signed Little-Endian PCM, wrapped in a standard WAV header before sending to Gemini.
-- **TTS response:** After Gemini replies, the text is read aloud via `TextToSpeechService`.
+- `voice-backend/main.py`: FastAPI app + wake word/STT/LLM/TTS runtime loop.
+- `voice-backend/.env.example`: Runtime configuration template.
+- `voice-backend/requirements.txt`: Python dependencies.
 
-### Key files
+### Voice troubleshooting
 
-- `src/main/java/com/example/nuriaassistant/services/VoiceAssistantService.java`: Microphone capture, VAD, toggle-button logic, PCM→WAV conversion.
-- `src/main/java/com/example/nuriaassistant/services/GeminiService.java`: Gemini API client (text and audio queries with Google Search grounding).
-- `src/main/java/com/example/nuriaassistant/services/TextToSpeechService.java`: TTS playback of Gemini responses.
-
+- Check backend: `curl http://127.0.0.1:8090/health`
+- Start microphone loop: `curl -X POST http://127.0.0.1:8090/assistant/start`
+- Inspect wake/transcription state: `curl http://127.0.0.1:8090/assistant/state`
+- If Piper is missing, install `piper-tts` in the backend venv and set `PIPER_BIN` to the venv executable. The fallback `espeak-ng` is functional but sounds more robotic.

@@ -2,12 +2,9 @@ package com.example.nuriaassistant;
 
 import com.example.nuriaassistant.config.ConfigLoader;
 import com.example.nuriaassistant.models.SpotifyTrackData;
-import com.example.nuriaassistant.services.GeminiService;
 import com.example.nuriaassistant.services.NotificationServer;
 import com.example.nuriaassistant.services.TelegramService;
-import com.example.nuriaassistant.services.TextToSpeechService;
 import com.example.nuriaassistant.services.ThemeManager;
-import com.example.nuriaassistant.services.VoiceAssistantService;
 import com.example.nuriaassistant.services.WeatherService;
 import com.example.nuriaassistant.spotify.SpotifyService;
 import javafx.animation.Animation;
@@ -27,7 +24,6 @@ import javafx.scene.image.ImageView;
 import javafx.scene.layout.AnchorPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
-import javafx.scene.layout.VBox;
 import javafx.scene.shape.SVGPath;
 import javafx.util.Duration;
 
@@ -43,7 +39,6 @@ import java.util.concurrent.Executors;
  * 3. Weather widget data fetching and presentation.
  * 4. Local Notification server with visual banner alerts.
  * 5. Full-screen Spotify playback mode with smooth intro logo animations.
- * 6. Hands-free & Touch Voice Assistant powered by Gemini with Google Search & Voice Output.
  */
 public class AssistantController {
 
@@ -76,22 +71,6 @@ public class AssistantController {
 
     @FXML
     private Label notificationLabel;
-
-    // Gemini Voice UI
-    @FXML
-    private HBox voiceTouchButton;
-
-    @FXML
-    private Label voiceButtonText;
-
-    @FXML
-    private VBox voiceAssistantLayer;
-
-    @FXML
-    private Label voiceStatusLabel;
-
-    @FXML
-    private Label voiceResponseLabel;
 
     // Spotify Full Screen UI
     @FXML
@@ -126,10 +105,6 @@ public class AssistantController {
     private NotificationServer notificationServer;
     private TelegramService telegramService;
     private SpotifyService spotifyService;
-    private GeminiService geminiService;
-    private TextToSpeechService ttsService;
-    private VoiceAssistantService voiceAssistantService;
-
     // UI State
     private boolean isCurrentlyShowingSpotify = false;
     private String currentCoverUrl = null;
@@ -221,21 +196,6 @@ public class AssistantController {
             telegramService.start();
         }
 
-        // 6. Initialize Gemini Voice Assistant (Hands-Free + Google Search Grounding)
-        String geminiKey = configLoader.getProperty("GEMINI_API_KEY");
-        if (geminiKey != null && !geminiKey.isBlank()) {
-            geminiService = new GeminiService(geminiKey);
-            ttsService = new TextToSpeechService();
-            voiceAssistantService = new VoiceAssistantService(
-                    geminiService,
-                    ttsService,
-                    this::onVoiceStateChanged,
-                    this::onVoiceResponseReceived
-            );
-            // Start listening loop for microphone audio
-            voiceAssistantService.start();
-            System.out.println("VoiceAssistantService initialized with Gemini Google Search Grounding.");
-        }
     }
 
     /**
@@ -250,69 +210,6 @@ public class AssistantController {
         if (dateLabel != null) {
             dateLabel.setText(ThemeManager.formatDate(now));
         }
-    }
-
-    /**
-     * Triggered when user taps the on-screen Gemini Voice button.
-     */
-    @FXML
-    public void onVoiceButtonClicked() {
-        if (voiceAssistantService != null) {
-            voiceAssistantService.triggerManualListen();
-        } else {
-            showVoiceAssistantPopup("Configuración", "Por favor, añade tu clave GEMINI_API_KEY en config.properties para activar la voz.");
-        }
-    }
-
-    /**
-     * Dismisses the voice assistant popup card.
-     */
-    @FXML
-    public void dismissVoiceAssistant() {
-        if (voiceAssistantLayer != null) {
-            FadeTransition fadeOut = new FadeTransition(Duration.millis(300), voiceAssistantLayer);
-            fadeOut.setFromValue(voiceAssistantLayer.getOpacity());
-            fadeOut.setToValue(0.0);
-            fadeOut.setOnFinished(e -> voiceAssistantLayer.setVisible(false));
-            fadeOut.play();
-        }
-    }
-
-    private void onVoiceStateChanged(VoiceAssistantService.State state) {
-        Platform.runLater(() -> {
-            if (voiceAssistantLayer == null) return;
-            switch (state) {
-                case LISTENING -> {
-                    showVoiceAssistantPopup("🎙️ Escuchando...", "Habla ahora, te escucho...");
-                    if (voiceButtonText != null) voiceButtonText.setText("Detener 🔴");
-                }
-                case PROCESSING -> {
-                    showVoiceAssistantPopup("🧠 Consultando...", "Buscando en Google con Gemini...");
-                    if (voiceButtonText != null) voiceButtonText.setText("Pensando...");
-                }
-                case IDLE -> {
-                    if (voiceButtonText != null) voiceButtonText.setText("Gemini Voice");
-                }
-            }
-        });
-    }
-
-    private void onVoiceResponseReceived(String response) {
-        Platform.runLater(() -> {
-            showVoiceAssistantPopup("✨ Nuria (Gemini)", response);
-        });
-    }
-
-    private void showVoiceAssistantPopup(String title, String content) {
-        if (voiceAssistantLayer == null) return;
-        if (voiceStatusLabel != null) voiceStatusLabel.setText(title);
-        if (voiceResponseLabel != null) voiceResponseLabel.setText(content);
-
-        voiceAssistantLayer.setVisible(true);
-        FadeTransition fadeIn = new FadeTransition(Duration.millis(250), voiceAssistantLayer);
-        fadeIn.setFromValue(voiceAssistantLayer.getOpacity());
-        fadeIn.setToValue(1.0);
-        fadeIn.play();
     }
 
     /**
@@ -572,12 +469,6 @@ public class AssistantController {
      * Cleanly shuts down background threads and server resources.
      */
     public void shutdown() {
-        if (voiceAssistantService != null) {
-            voiceAssistantService.stop();
-        }
-        if (ttsService != null) {
-            ttsService.stop();
-        }
         if (telegramService != null) {
             telegramService.stop();
         }
