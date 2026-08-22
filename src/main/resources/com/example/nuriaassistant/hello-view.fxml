@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
 <?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
 <?import javafx.scene.image.ImageView?>
 <?import javafx.scene.layout.AnchorPane?>
 <?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.StackPane?>
 <?import javafx.scene.layout.VBox?>
 <?import javafx.scene.shape.SVGPath?>
@@ -58,32 +60,17 @@
                        text="Granada"
                        styleClass="minimal-weather-city"/>
             </HBox>
+
+            <!-- 4. Next Alarm Hint (subtle, under weather row) -->
+            <HBox fx:id="nextAlarmRow" visible="false"
+                  alignment="CENTER_LEFT" spacing="8.0">
+                <Label text="&#9200;"
+                       styleClass="next-alarm-icon"/>
+                <Label fx:id="nextAlarmLabel"
+                       text=""
+                       styleClass="next-alarm-text"/>
+            </HBox>
         </VBox>
-
-        <!-- Notification Banner at Bottom (Sticky Note - Persists until tapped or cleared via Telegram) -->
-        <HBox fx:id="notificationBanner"
-              visible="false"
-              alignment="CENTER_LEFT" spacing="14.0"
-              styleClass="notification-banner"
-              AnchorPane.bottomAnchor="30.0"
-              AnchorPane.leftAnchor="48.0"
-              AnchorPane.rightAnchor="48.0">
-
-            <Label text="🔔" style="-fx-font-size: 22px;"/>
-            <Label fx:id="notificationLabel"
-                   text=""
-                   styleClass="notification-text"
-                   wrapText="true"
-                   HBox.hgrow="ALWAYS"/>
-
-            <!-- Spacer -->
-            <HBox HBox.hgrow="ALWAYS"/>
-
-            <!-- Touch Dismiss Button -->
-            <Label text="✕"
-                   onMouseClicked="#dismissNotification"
-                   styleClass="notification-close-btn"/>
-        </HBox>
     </AnchorPane>
 
     <!-- Spotify Full Screen Layer (Activated when Spotify is playing) -->
@@ -185,19 +172,31 @@
                 AnchorPane.topAnchor="0.0" AnchorPane.bottomAnchor="0.0"
                 AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0">
 
-        <!-- Ambient Mic Orb / Mute Button (Collapsed state, top-right corner) -->
-        <HBox fx:id="voiceOrb" alignment="CENTER" spacing="8.0"
-              styleClass="voice-orb"
-              onMouseClicked="#toggleVoiceMute"
+        <!-- Top-Right Row: Alarm Clock Button + Ambient Mic Orb / Mute Button -->
+        <HBox alignment="CENTER_LEFT" spacing="14.0"
               AnchorPane.topAnchor="26.0"
               AnchorPane.rightAnchor="30.0">
-            <SVGPath fx:id="voiceMicIcon"
-                     content="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"
-                     fill="#38bdf8" scaleX="1.5" scaleY="1.5"/>
-            <SVGPath fx:id="voiceMicOffIcon"
-                     visible="false"
-                     content="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"
-                     fill="#94a3b8" scaleX="1.5" scaleY="1.5"/>
+
+            <!-- Alarms Entry (clock icon, opens manager sheet) -->
+            <HBox alignment="CENTER"
+                  styleClass="alarm-clock-button"
+                  onMouseClicked="#openAlarmManager">
+                <SVGPath content="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"
+                         fill="#38bdf8" scaleX="1.5" scaleY="1.5"/>
+            </HBox>
+
+            <!-- Ambient Mic Orb / Mute Button (Collapsed state) -->
+            <HBox fx:id="voiceOrb" alignment="CENTER" spacing="8.0"
+                  styleClass="voice-orb"
+                  onMouseClicked="#toggleVoiceMute">
+                <SVGPath fx:id="voiceMicIcon"
+                         content="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"
+                         fill="#38bdf8" scaleX="1.5" scaleY="1.5"/>
+                <SVGPath fx:id="voiceMicOffIcon"
+                         visible="false"
+                         content="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"
+                         fill="#94a3b8" scaleX="1.5" scaleY="1.5"/>
+            </HBox>
         </HBox>
 
         <!-- Conversation Card (Expanded state, rises from bottom center) -->
@@ -240,19 +239,210 @@
                            styleClass="voice-bubble-text"/>
                 </VBox>
 
-                <!-- Nuria Reply Bubble -->
+                <!-- Alpha Reply Bubble -->
                 <VBox fx:id="voiceReplyBubble"
                       visible="false"
                       alignment="CENTER_LEFT" spacing="2.0"
                       maxWidth="650.0"
-                      styleClass="voice-bubble-nuria">
-                    <Label text="NURIA" styleClass="voice-bubble-nuria-author"/>
+                      styleClass="voice-bubble-alpha">
+                    <Label text="ALPHA" styleClass="voice-bubble-alpha-author"/>
                     <Label fx:id="voiceReplyLabel"
                            text=""
                            wrapText="true"
                            styleClass="voice-bubble-text"/>
                 </VBox>
             </VBox>
+        </HBox>
+    </AnchorPane>
+
+    <!-- Notification Banner (Topmost transient alert; tap ✕ to dismiss) -->
+    <HBox fx:id="notificationBanner"
+          visible="false"
+          alignment="CENTER_LEFT" spacing="14.0"
+          styleClass="notification-banner"
+          AnchorPane.bottomAnchor="30.0"
+          AnchorPane.leftAnchor="48.0"
+          AnchorPane.rightAnchor="48.0">
+
+        <Label text="🔔" style="-fx-font-size: 22px;"/>
+        <Label fx:id="notificationLabel"
+               text=""
+               styleClass="notification-text"
+               wrapText="true"
+               HBox.hgrow="ALWAYS"/>
+
+        <!-- Spacer -->
+        <HBox HBox.hgrow="ALWAYS"/>
+
+        <!-- Touch Dismiss Button -->
+        <Label text="✕"
+               onMouseClicked="#dismissNotification"
+               styleClass="notification-close-btn"/>
+    </HBox>
+
+    <!-- Alarm Manager Sheet (Modal: list, add, toggle and delete alarms by touch) -->
+    <AnchorPane fx:id="alarmManagerLayer"
+                visible="false"
+                styleClass="alarm-sheet-backdrop"
+                onMouseClicked="#closeAlarmManagerOnOutsideClick"
+                AnchorPane.topAnchor="0.0" AnchorPane.bottomAnchor="0.0"
+                AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0">
+
+        <!-- Full-screen touch-friendly card -->
+        <VBox fx:id="alarmSheetCard"
+              alignment="TOP_CENTER" spacing="10.0"
+              styleClass="alarm-sheet-card"
+              onMouseClicked="#swallowAlarmCardClick"
+              AnchorPane.topAnchor="14.0" AnchorPane.bottomAnchor="14.0"
+              AnchorPane.leftAnchor="14.0" AnchorPane.rightAnchor="14.0">
+
+            <!-- Header -->
+            <HBox alignment="CENTER_LEFT" spacing="12.0">
+                <Label text="&#9200;" style="-fx-font-size: 24px;"/>
+                <Label text="Alarmas" styleClass="alarm-sheet-title"/>
+                <Region/>
+                <Label text="&#10005;"
+                       onMouseClicked="#closeAlarmManager"
+                       styleClass="alarm-sheet-close"/>
+            </HBox>
+
+            <!-- Alarm Rows (built dynamically) -->
+            <ScrollPane fx:id="alarmListScroll"
+                        fitToWidth="true"
+                        hbarPolicy="NEVER"
+                        vbarPolicy="AS_NEEDED"
+                        styleClass="alarm-list-scroll">
+                <VBox fx:id="alarmListContainer" spacing="12.0"/>
+            </ScrollPane>
+
+            <!-- Empty hint -->
+            <Label fx:id="alarmEmptyHint"
+                   text="No hay alarmas todav&#237;a. Crea una con el bot&#243;n de abajo."
+                   wrapText="true"
+                   styleClass="alarm-empty-hint"/>
+
+            <!-- Add Button -->
+            <Label fx:id="addAlarmButton"
+                   text="+  Nueva alarma"
+                   onMouseClicked="#showNewAlarmEditor"
+                   alignment="CENTER"
+                   styleClass="add-alarm-button"/>
+
+            <!-- Editor (hidden until adding/editing) -->
+            <VBox fx:id="alarmEditorPane"
+                  visible="false" managed="false"
+                  alignment="TOP_CENTER" spacing="10.0"
+                  styleClass="alarm-editor-pane">
+
+                <Label fx:id="editorTimePreview"
+                       text="07:00"
+                       styleClass="alarm-editor-preview"/>
+
+                <!-- Hour / Minute steppers -->
+                <HBox alignment="CENTER" spacing="56.0">
+                    <VBox alignment="CENTER" spacing="2.0">
+                        <Label text="Hora" styleClass="alarm-stepper-caption"/>
+                        <HBox alignment="CENTER" spacing="10.0">
+                            <Label text="&#8722;"
+                                   onMouseClicked="#decrementHour"
+                                   styleClass="stepper-button"/>
+                            <Label fx:id="editorHourValue" text="07" styleClass="stepper-value"/>
+                            <Label text="+"
+                                   onMouseClicked="#incrementHour"
+                                   styleClass="stepper-button"/>
+                        </HBox>
+                    </VBox>
+
+                    <VBox alignment="CENTER" spacing="2.0">
+                        <Label text="Minuto" styleClass="alarm-stepper-caption"/>
+                        <HBox alignment="CENTER" spacing="10.0">
+                            <Label text="&#8722;"
+                                   onMouseClicked="#decrementMinute"
+                                   styleClass="stepper-button"/>
+                            <Label fx:id="editorMinuteValue" text="00" styleClass="stepper-value"/>
+                            <Label text="+"
+                                   onMouseClicked="#incrementMinute"
+                                   styleClass="stepper-button"/>
+                        </HBox>
+                    </VBox>
+                </HBox>
+
+                <!-- Repeat mode: one-shot vs recurring -->
+                <HBox alignment="CENTER" spacing="12.0">
+                    <Label fx:id="modeOnceButton"
+                           text="Solo una vez"
+                           onMouseClicked="#selectOnceMode"
+                           styleClass="alarm-mode-button"/>
+                    <Label fx:id="modeRepeatButton"
+                           text="Repetir"
+                           onMouseClicked="#selectRepeatMode"
+                           styleClass="alarm-mode-button-selected"/>
+                </HBox>
+
+                <!-- Day-of-week chips (built dynamically) -->
+                <VBox fx:id="dayChipsSection" alignment="CENTER" spacing="4.0">
+                    <HBox fx:id="dayChipsRow" alignment="CENTER" spacing="10.0"/>
+                    <Label fx:id="editorDaysHint" text="" styleClass="alarm-days-hint"/>
+                </VBox>
+
+                <!-- Save / Cancel -->
+                <HBox alignment="CENTER" spacing="16.0">
+                    <Label text="Cancelar"
+                           onMouseClicked="#cancelAlarmEditor"
+                           styleClass="alarm-editor-cancel"/>
+                    <Label text="Guardar"
+                           onMouseClicked="#saveAlarmFromEditor"
+                           styleClass="alarm-editor-save"/>
+                </HBox>
+            </VBox>
+        </VBox>
+    </AnchorPane>
+
+    <!-- Alarm Ring Overlay (Topmost layer when an alarm fires) -->
+    <AnchorPane fx:id="alarmRingLayer"
+                visible="false" opacity="0.0"
+                styleClass="alarm-ring-background"
+                AnchorPane.topAnchor="0.0" AnchorPane.bottomAnchor="0.0"
+                AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0">
+
+        <!-- Pulsing glow backdrop (animated opacity only) -->
+        <AnchorPane fx:id="alarmGlowPane"
+                    visible="false"
+                    styleClass="alarm-glow"
+                    AnchorPane.topAnchor="0.0" AnchorPane.bottomAnchor="0.0"
+                    AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0"/>
+
+        <!-- Center content -->
+        <VBox alignment="CENTER" spacing="14.0"
+              AnchorPane.topAnchor="0.0" AnchorPane.bottomAnchor="90.0"
+              AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0">
+
+            <Label
+                   text="&#9200;"
+                   styleClass="alarm-ring-icon"/>
+            <Label fx:id="alarmRingTimeLabel"
+                   text="--:--"
+                   styleClass="alarm-ring-time"/>
+            <Label fx:id="alarmRingTitleLabel"
+                   text="Alarma"
+                   styleClass="alarm-ring-title"/>
+        </VBox>
+
+        <!-- Touch buttons: Snooze + Dismiss -->
+        <HBox alignment="CENTER" spacing="26.0"
+              AnchorPane.bottomAnchor="70.0"
+              AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0">
+
+            <Label
+                   text="Posponer 5 min"
+                   alignment="CENTER"
+                   onMouseClicked="#snoozeActiveAlarm"
+                   styleClass="alarm-snooze-button"/>
+            <Label
+                   text="Apagar"
+                   alignment="CENTER"
+                   onMouseClicked="#dismissActiveAlarm"
+                   styleClass="alarm-dismiss-button"/>
         </HBox>
     </AnchorPane>
 

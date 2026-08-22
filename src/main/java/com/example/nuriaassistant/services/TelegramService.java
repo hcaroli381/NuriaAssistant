@@ -15,7 +15,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Service to connect Nuria Assistant with Telegram Bot API.
+ * Service to connect Alpha Assistant with Telegram Bot API.
  * Allows receiving messages from anywhere in the world and displaying them on the screen.
  */
 public class TelegramService {

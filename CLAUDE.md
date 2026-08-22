@@ -2,9 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) and other AI instances when working with code in this repository.
 
-## Project Architecture
+## Naming
 
-This is a JavaFX desktop application designed to run on a Raspberry Pi 3 with a 1024x600 touchscreen. 
+The assistant's public/persona name is **Alpha** (never "Nuria"). User-facing strings, prompts and UI labels must say Alpha. Internal identifiers (Java packages `com.example.nuriaassistant`, systemd unit names, repo folder, API key value) intentionally keep the legacy naming to avoid breaking deployments — do not rename them casually.
+
+This is a JavaFX desktop application designed to run on a Raspberry Pi 3 with a 1024x600 touchscreen.
 The system operates as an "always-on" smart assistant (similar to an Echo Show) with the following components:
 
 1. **Main JavaFX Application (The Orchestrator):** Handles UI, clock, date display, weather widget, notifications, and Spotify playback view. Designed for 24/7 uptime.
@@ -16,14 +18,21 @@ The system operates as an "always-on" smart assistant (similar to an Echo Show) 
 4. **Backend Bridge & Remote Notification System (`NotificationServer`):**
    - Lightweight embedded HTTP server running on port `8080` (`POST /notify`).
    - Authenticated via header `X-API-KEY: nuria-assistant-secret-key`.
-   - Displays an animated notification pill at the bottom of the screen with a 10-second auto-hide timeout.
+   - Shows an amber/gold notification pill at the bottom of the screen that persists until tapped on-screen or cleared via Telegram `/clear`.
 5. **Telegram Bot Integration (`TelegramService`):**
    - Enables sending remote messages to the screen from Telegram on any phone/PC from anywhere in the world.
    - Long-polling daemon using standard Java HTTP Client (zero heavy dependencies, negligible RAM footprint).
    - Sends confirmation reply back to the Telegram chat when the message is displayed on screen.
 6. **Weather Service (`WeatherService`):**
    - Fetches current weather data from OpenWeatherMap API for the configured city.
-7. **Voice Assistant Front-End (`VoiceAssistantService`):**
+8. **Alarm System (`AlarmService`, tactile only for now):**
+   - Alarms persist as zero-dependency JSON at `~/.alpha/alarms.json` (atomic writes, survives reboots).
+   - Checked every second from the existing clock tick; a 30-second fire window prevents skipped rings under load.
+   - Full-screen ring overlay (purple radial gradient + pulsing orange glow) with big time display and two large touch buttons: *Posponer 5 min* and *Apagar*.
+   - Looping WAV chime (`sounds/alarm.wav`) via JavaFX `MediaPlayer` — no new dependencies.
+   - Full-screen touch manager sheet (clock icon button next to the top-right mic orb): list sorted by time, ON/OFF toggle, delete ✕, tap row to edit, add with hour/minute steppers, *Solo una vez* / *Repetir* mode selector and L M X J V S D day chips (empty selection = daily).
+   - Subtle next-alarm hint under the weather row ("Hoy 07:00", "07:00 en 12 min", "Posponer ...").
+9. **Voice Assistant Front-End (`VoiceAssistantService`):**
    - Live UI mirror of the Python voice backend, polled every second on a dedicated daemon thread.
    - Ambient mic orb (top-right, doubles as touch mute button) + expandable glassmorphic conversation card.
    - Colors mirror the backend LED ring semantics: sky-blue idle, green listening, amber processing, purple speaking, red error.
@@ -40,7 +49,7 @@ The system operates as an "always-on" smart assistant (similar to an Echo Show) 
    TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz
    ```
 3. (Optional) Set `TELEGRAM_ALLOWED_CHAT_ID` if you only want your user ID to be allowed.
-4. Open your bot in Telegram, tap `/start` and send any message (e.g. *"Hola Nuria! 🥖"*).
+4. Open your bot in Telegram, tap `/start` and send any message (e.g. *"Hola Alpha! 🥖"*).
 5. The message will pop up on the screen and the bot will reply with *"✅ Mensaje mostrado en la pantalla"*.
 
 ### 2. Sending messages via local HTTP API (`NotificationServer`)
@@ -103,7 +112,33 @@ print(response.text)
 - `src/main/java/com/example/nuriaassistant/services/NotificationServer.java`: HTTP server for remote push notifications.
 - `src/main/java/com/example/nuriaassistant/services/VoiceAssistantService.java`: HTTP client for the voice backend (state polling, start/stop, zero-dependency JSON parsing).
 - `src/main/java/com/example/nuriaassistant/models/VoiceAssistantSnapshot.java`: Immutable record of the backend runtime state.
+- `src/main/java/com/example/nuriaassistant/models/Alarm.java`: Alarm model (time, repeat days, snooze/fire state, due-window logic).
+- `src/main/java/com/example/nuriaassistant/services/AlarmService.java`: Alarm persistence (`~/.alpha/alarms.json`), due-checks and next-alarm summary.
+- `src/main/resources/com/example/nuriaassistant/sounds/alarm.wav`: Looping ring chime.
 - `deploy/`: systemd units (`nuria-voice.service`, `nuria-assistant.service`) + `install.sh` for boot-on-power kiosk deployment.
+
+## Alarms
+
+- **Storage:** `~/.alpha/alarms.json`. Schema:
+  ```json
+  [
+    {
+      "id": "uuid",
+      "hour": 7,
+      "minute": 30,
+      "enabled": true,
+      "label": "Despertar",
+      "repeatDays": ["MONDAY", "TUESDAY"],
+      "once": false,
+      "lastFiredDate": "2026-08-22",
+      "snoozeUntil": null
+    }
+  ]
+  ```
+- Empty `repeatDays` = daily. `lastFiredDate` prevents double-rings within the same day; `snoozeUntil` re-rings after *Posponer* (+5 min).
+- `"once": true` alarms ring a single time and are auto-deleted when dismissed (*Solo una vez* mode in the editor); snoozing one keeps it until the snoozed ring is dismissed.
+- **Tactile only for now:** set alarms from the on-screen sheet (clock icon button beside the top-right mic orb). Voice (`set_alarm`) and Telegram `/alarma HH:mm` commands are planned follow-ups — wire them through a future `POST /alarm` endpoint on `NotificationServer`.
+- **Z-order gotcha:** full-screen visible panes (e.g. `voiceOverlayLayer`) swallow touches beneath them — interactive controls must live in a layer at or above the overlays that are visible simultaneously (this is why the alarm clock button lives inside `voiceOverlayLayer`, and the notification banner sits above it as its own topmost layer).
 
 ## Spotify/Media Integration
 
@@ -165,7 +200,7 @@ The backend can emit/execute structured actions:
 - `.env` is loaded via `python-dotenv` relative to `main.py` itself, so uvicorn can be launched from any working directory.
 - Relative model paths (`VOSK_MODEL_PATH`, `PIPER_MODEL_PATH`, `VOICE_WAKEWORD_MODEL_PATH`) are resolved against the backend directory, keeping the same `.env` portable across machines.
 - **Pre-speech timeout** (`VOICE_PRE_SPEECH_TIMEOUT_SECONDS`, default 2.5s): if the wake word fires but nobody starts speaking, capture ends and the runtime returns to idle instead of waiting the full 8s speech window.
-- **Post-reply echo flush** (`VOICE_POST_REPLY_FLUSH_SECONDS`, default 0.8s): buffered mic audio (which contains the TTS echo of Nuria's own voice) is discarded after every answer to prevent self-triggered listening cycles.
+- **Post-reply echo flush** (`VOICE_POST_REPLY_FLUSH_SECONDS`, default 0.8s): buffered mic audio (which contains the TTS echo of Alpha's own voice) is discarded after every answer to prevent self-triggered listening cycles.
 - Muting from the front-end simply calls `POST /assistant/stop` (mic off, models stay loaded); unmuting calls `/assistant/start`. The JavaFX auto-start never fights a manual mute.
 
 ### Boot-on-power deployment (Raspberry Pi)
@@ -183,5 +218,7 @@ cd deploy && ./install.sh $USER          # renders placeholders and installs bot
 - Check backend: `curl http://127.0.0.1:8090/health`
 - Start microphone loop: `curl -X POST http://127.0.0.1:8090/assistant/start`
 - Inspect wake/transcription state: `curl http://127.0.0.1:8090/assistant/state`
+- App console diagnostics: `Voice backend reachable; polling live.` on first contact, then `...runtime stopped. Auto-starting...` within ~15s; failed start/stop requests are now logged instead of swallowed.
+- Grey orb = backend unreachable from the app (auto-start can only fire once polls succeed). If it persists, check the service: `systemctl status nuria-voice`.
 - If Piper is missing, install `piper-tts` in the backend venv and set `PIPER_BIN` to the venv executable. The fallback `espeak-ng` is functional but sounds more robotic.
 - If the assistant "keeps listening" in noisy rooms (music playing), raise `VOICE_RMS_THRESHOLD` (e.g., 800–1200).

@@ -76,7 +76,10 @@ public class VoiceAssistantService {
                 .build();
 
         httpClient.sendAsync(request, HttpResponse.BodyHandlers.discarding())
-                .exceptionally(ex -> null);
+                .exceptionally(ex -> {
+                    System.err.println("VoiceAssistantService: " + path + " request failed: " + ex.getMessage());
+                    return null;
+                });
     }
 
     /**

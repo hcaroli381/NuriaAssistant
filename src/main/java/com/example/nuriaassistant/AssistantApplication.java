@@ -31,7 +31,7 @@ public class AssistantApplication extends Application {
 
         controller = fxmlLoader.getController();
 
-        stage.setTitle("Nuria Assistant");
+        stage.setTitle("Alpha Assistant");
         stage.setScene(scene);
         stage.show();
     }

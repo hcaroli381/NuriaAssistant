@@ -131,7 +131,7 @@ class StopResponse(BaseModel):
     message: str
 
 
-SYSTEM_PROMPT = """You are Nuria, a concise Spanish home assistant.
+SYSTEM_PROMPT = """You are Alpha, a concise Spanish home assistant.
 You can return one optional action + a spoken reply.
 
 Allowed actions:
@@ -501,7 +501,7 @@ class VoiceAssistantRuntime:
             return
 
         self._set_state(AssistantState.speaking)
-        fd, wav_path = tempfile.mkstemp(prefix="nuria-tts-", suffix=".wav")
+        fd, wav_path = tempfile.mkstemp(prefix="alpha-tts-", suffix=".wav")
         os.close(fd)
 
         try:
@@ -572,7 +572,7 @@ class LedRingController:
         self._pixels.show()
 
 
-app = FastAPI(title="Nuria Voice Backend", version="1.0.0")
+app = FastAPI(title="Alpha Voice Backend", version="1.0.0")
 settings = Settings()
 runtime: VoiceAssistantRuntime | None = None
 runtime_init_error = ""

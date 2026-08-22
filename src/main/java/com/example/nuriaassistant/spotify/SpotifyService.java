@@ -100,10 +100,10 @@ public class SpotifyService {
 
                 String response;
                 if (code != null) {
-                    response = "<!DOCTYPE html><html><head><title>Nuria Assistant - Spotify Connected</title></head>"
+                    response = "<!DOCTYPE html><html><head><title>Alpha Assistant - Spotify Connected</title></head>"
                             + "<body style='font-family: Arial, sans-serif; text-align: center; padding-top: 50px; background: #121212; color: #1DB954;'>"
                             + "<h1>✓ Spotify Connected Successfully!</h1>"
-                            + "<p style='color: #FFFFFF; font-size: 18px;'>You can now close this window and return to Nuria Assistant.</p>"
+                            + "<p style='color: #FFFFFF; font-size: 18px;'>You can now close this window and return to Alpha Assistant.</p>"
                             + "</body></html>";
                     exchange.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
                     exchange.sendResponseHeaders(200, response.getBytes().length);

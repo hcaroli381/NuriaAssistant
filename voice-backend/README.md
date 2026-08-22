@@ -1,4 +1,4 @@
-# Nuria Voice Backend (Raspberry Pi 3)
+# Alpha Voice Backend (Raspberry Pi 3)
 
 Offline-first voice stack:
 1. openWakeWord (wake word)

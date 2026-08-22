@@ -1,8 +1,10 @@
 package com.example.nuriaassistant;
 
 import com.example.nuriaassistant.config.ConfigLoader;
+import com.example.nuriaassistant.models.Alarm;
 import com.example.nuriaassistant.models.SpotifyTrackData;
 import com.example.nuriaassistant.models.VoiceAssistantSnapshot;
+import com.example.nuriaassistant.services.AlarmService;
 import com.example.nuriaassistant.services.NotificationServer;
 import com.example.nuriaassistant.services.TelegramService;
 import com.example.nuriaassistant.services.ThemeManager;
@@ -22,22 +24,38 @@ import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
 import javafx.scene.control.Label;
+import javafx.scene.control.ScrollPane;
+import javafx.scene.Cursor;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.input.MouseEvent;
+import javafx.geometry.Pos;
 import javafx.scene.layout.AnchorPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.media.Media;
+import javafx.scene.media.MediaPlayer;
 import javafx.scene.paint.Color;
 import javafx.scene.shape.SVGPath;
 import javafx.util.Duration;
 
+import java.time.DayOfWeek;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * Main Controller for the Nuria Assistant application.
+ * Main Controller for the Alpha Assistant application.
  * Manages:
  * 1. Real-time Clock and Date display (Day of week, Day of month, and Month name).
  * 2. High-contrast, minimalist top-left layout with deep Navy Blue background.
@@ -152,11 +170,78 @@ public class AssistantController {
     @FXML
     private Label voiceReplyLabel;
 
+    // Next-Alarm Hint UI
+    @FXML
+    private HBox nextAlarmRow;
+
+    @FXML
+    private Label nextAlarmLabel;
+
+    // Alarm Manager Sheet UI
+    @FXML
+    private AnchorPane alarmManagerLayer;
+
+    @FXML
+    private VBox alarmSheetCard;
+
+    @FXML
+    private ScrollPane alarmListScroll;
+
+    @FXML
+    private VBox alarmListContainer;
+
+    @FXML
+    private Label alarmEmptyHint;
+
+    @FXML
+    private Label addAlarmButton;
+
+    @FXML
+    private VBox alarmEditorPane;
+
+    @FXML
+    private Label editorTimePreview;
+
+    @FXML
+    private Label editorHourValue;
+
+    @FXML
+    private Label editorMinuteValue;
+
+    @FXML
+    private HBox dayChipsRow;
+
+    @FXML
+    private VBox dayChipsSection;
+
+    @FXML
+    private Label editorDaysHint;
+
+    @FXML
+    private Label modeOnceButton;
+
+    @FXML
+    private Label modeRepeatButton;
+
+    // Alarm Ring Overlay UI
+    @FXML
+    private AnchorPane alarmRingLayer;
+
+    @FXML
+    private AnchorPane alarmGlowPane;
+
+    @FXML
+    private Label alarmRingTimeLabel;
+
+    @FXML
+    private Label alarmRingTitleLabel;
+
     private WeatherService weatherService;
     private NotificationServer notificationServer;
     private TelegramService telegramService;
     private SpotifyService spotifyService;
     private VoiceAssistantService voiceService;
+    private AlarmService alarmService;
 
     // UI State
     private boolean isCurrentlyShowingSpotify = false;
@@ -174,6 +259,20 @@ public class AssistantController {
     private PauseTransition replyLingerTimer = null;
     private Timeline cardSlideIn = null;
     private FadeTransition cardFadeOut = null;
+
+    // Alarm State
+    private Alarm activeRingingAlarm = null;
+    private MediaPlayer alarmPlayer = null;
+    private Timeline alarmGlowPulse = null;
+    private int lastAlarmHintMinute = -1;
+
+    // Alarm Editor State (null id = creating a new alarm)
+    private Alarm editingAlarm = null;
+    private int editorHour = 7;
+    private int editorMinute = 0;
+    private boolean editorOnce = false;
+    private final Set<DayOfWeek> editorDays = new LinkedHashSet<>();
+    private final List<Label> dayChips = new ArrayList<>();
 
     // Background thread executor for non-blocking Spotify polling
     private final ExecutorService spotifyExecutor = Executors.newSingleThreadExecutor(r -> {
@@ -198,6 +297,11 @@ public class AssistantController {
         Timeline clockTimeline = new Timeline(new KeyFrame(Duration.seconds(1), event -> updateTime()));
         clockTimeline.setCycleCount(Animation.INDEFINITE);
         clockTimeline.play();
+
+        // 1b. Initialize Alarm System (persistence at ~/.alpha/alarms.json)
+        alarmService = new AlarmService();
+        buildDayChips();
+        refreshNextAlarmHint();
 
         // 2. Initialize Weather Service
         String apiKey = configLoader.getProperty("OPENWEATHER_API_KEY");
@@ -280,6 +384,7 @@ public class AssistantController {
 
     /**
      * Updates the clock display and the date (day of the week, day of month, and month name).
+     * Also drives the alarm checks and refreshes the next-alarm hint once per minute.
      */
     private void updateTime() {
         LocalDateTime now = LocalDateTime.now();
@@ -289,6 +394,12 @@ public class AssistantController {
         }
         if (dateLabel != null) {
             dateLabel.setText(ThemeManager.formatDate(now));
+        }
+
+        checkAlarms(now);
+        if (now.getMinute() != lastAlarmHintMinute) {
+            lastAlarmHintMinute = now.getMinute();
+            refreshNextAlarmHint();
         }
     }
 
@@ -626,6 +737,9 @@ public class AssistantController {
         voiceOverlayLayer.setVisible(true);
 
         if (!snapshot.offline()) {
+            if (!voiceBackendOnline) {
+                System.out.println("Voice backend reachable; polling live.");
+            }
             voiceBackendOnline = true;
             maybeAutoStartRuntime(snapshot);
         } else {
@@ -729,7 +843,7 @@ public class AssistantController {
                 voiceDotsRow.setVisible(false);
                 voiceReplyLabel.setText(snapshot.lastReply());
                 voiceReplyBubble.setVisible(true);
-                voiceStatusLabel.setText("Nuria dice:");
+                voiceStatusLabel.setText("Alpha dice:");
             }
             case "ERROR" -> {
                 setVoiceTheme("#ef4444", "239,68,68", 1.0);
@@ -918,7 +1032,7 @@ public class AssistantController {
     }
 
     /**
-     * Keeps Nuria's reply on screen for 8 seconds after speaking ends.
+     * Keeps Alpha's reply on screen for 8 seconds after speaking ends.
      */
     private void scheduleReplyLinger() {
         cancelReplyLinger();
@@ -964,6 +1078,455 @@ public class AssistantController {
         voiceDot3.setOpacity(0.25);
     }
 
+    // =========================================================================
+    // ALARM SYSTEM (tactile: full-screen ring overlay + manager sheet)
+    // =========================================================================
+
+    /**
+     * Called every second from the clock tick. Fires the first due alarm.
+     */
+    private void checkAlarms(LocalDateTime now) {
+        if (alarmService == null || alarmRingLayer.isVisible()) {
+            return;
+        }
+        Optional<Alarm> due = alarmService.findDueAlarm(now);
+        due.ifPresent(this::startRinging);
+    }
+
+    /**
+     * Shows the full-screen ringing overlay: big time, pulsing glow and looping sound.
+     */
+    private void startRinging(Alarm alarm) {
+        activeRingingAlarm = alarm;
+
+        alarmRingTimeLabel.setText(alarm.displayTime());
+        String title = alarm.label();
+        alarmRingTitleLabel.setText(title == null || title.isBlank() ? "Alarma" : title);
+
+        // The manager sheet must never stay above the ringing overlay
+        if (alarmManagerLayer.isVisible()) {
+            closeAlarmManager();
+        }
+
+        ensureAlarmSound();
+        if (alarmPlayer != null) {
+            try {
+                alarmPlayer.seek(Duration.ZERO);
+                alarmPlayer.play();
+            } catch (Exception e) {
+                System.err.println("Alarm audio playback failed: " + e.getMessage());
+            }
+        }
+
+        startGlowPulse();
+
+        alarmRingLayer.setOpacity(0.0);
+        alarmRingLayer.setVisible(true);
+        FadeTransition fadeIn = new FadeTransition(Duration.millis(350), alarmRingLayer);
+        fadeIn.setFromValue(0.0);
+        fadeIn.setToValue(1.0);
+        fadeIn.play();
+
+        System.out.println("Alarm ringing: " + alarm.displayTime());
+    }
+
+    /** Snooze button (+5 min) on the ring overlay. */
+    @FXML
+    public void snoozeActiveAlarm() {
+        if (activeRingingAlarm != null && alarmService != null) {
+            alarmService.snooze(activeRingingAlarm, 5);
+        }
+        stopRinging();
+    }
+
+    /** Dismiss button on the ring overlay. One-shot alarms are removed once dismissed. */
+    @FXML
+    public void dismissActiveAlarm() {
+        Alarm fired = activeRingingAlarm;
+        stopRinging();
+        if (fired != null && fired.isOnce() && alarmService != null) {
+            alarmService.removeAlarm(fired.id());
+            refreshNextAlarmHint();
+        }
+    }
+
+    private void stopRinging() {
+        activeRingingAlarm = null;
+        stopGlowPulse();
+        if (alarmPlayer != null) {
+            try {
+                alarmPlayer.stop();
+            } catch (Exception ignored) {
+            }
+        }
+        refreshNextAlarmHint();
+
+        if (!alarmRingLayer.isVisible()) {
+            return;
+        }
+        FadeTransition fadeOut = new FadeTransition(Duration.millis(300), alarmRingLayer);
+        fadeOut.setFromValue(alarmRingLayer.getOpacity());
+        fadeOut.setToValue(0.0);
+        fadeOut.setOnFinished(e -> alarmRingLayer.setVisible(false));
+        fadeOut.play();
+    }
+
+    /**
+     * Lazily prepares the looping alarm sound player (WAV asset, no new dependencies).
+     */
+    private void ensureAlarmSound() {
+        if (alarmPlayer != null) {
+            return;
+        }
+        try {
+            java.net.URL soundUrl = getClass().getResource("/com/example/nuriaassistant/sounds/alarm.wav");
+            if (soundUrl == null) {
+                System.err.println("Alarm sound resource not found.");
+                return;
+            }
+            Media media = new Media(soundUrl.toExternalForm());
+            MediaPlayer player = new MediaPlayer(media);
+            player.setCycleCount(MediaPlayer.INDEFINITE);
+            player.setVolume(0.9);
+            alarmPlayer = player;
+        } catch (Exception e) {
+            System.err.println("Failed to prepare alarm audio: " + e.getMessage());
+        }
+    }
+
+    private void startGlowPulse() {
+        if (alarmGlowPulse == null) {
+            alarmGlowPulse = new Timeline(
+                    new KeyFrame(Duration.ZERO,
+                            new KeyValue(alarmGlowPane.opacityProperty(), 0.25, Interpolator.EASE_BOTH)),
+                    new KeyFrame(Duration.millis(850),
+                            new KeyValue(alarmGlowPane.opacityProperty(), 1.0, Interpolator.EASE_BOTH)));
+            alarmGlowPulse.setAutoReverse(true);
+            alarmGlowPulse.setCycleCount(Animation.INDEFINITE);
+        }
+        alarmGlowPane.setVisible(true);
+        alarmGlowPulse.playFrom(Duration.ZERO);
+    }
+
+    private void stopGlowPulse() {
+        if (alarmGlowPulse != null && alarmGlowPulse.getStatus() == Animation.Status.RUNNING) {
+            alarmGlowPulse.stop();
+        }
+        alarmGlowPane.setVisible(false);
+    }
+
+    /**
+     * Updates the subtle next-alarm hint under the weather row.
+     */
+    private void refreshNextAlarmHint() {
+        if (nextAlarmRow == null || nextAlarmLabel == null) {
+            return;
+        }
+        String summary = alarmService != null ? alarmService.nextAlarmSummary() : null;
+        nextAlarmRow.setVisible(summary != null);
+        nextAlarmLabel.setText(summary != null ? summary : "");
+    }
+
+    // -------------------------------------------------------------------------
+    // Alarm Manager Sheet (list / add / toggle / delete)
+    // -------------------------------------------------------------------------
+
+    @FXML
+    public void openAlarmManager() {
+        exitAlarmEditor();
+        rebuildAlarmList();
+        alarmManagerLayer.setOpacity(0.0);
+        alarmManagerLayer.setVisible(true);
+        FadeTransition fadeIn = new FadeTransition(Duration.millis(200), alarmManagerLayer);
+        fadeIn.setFromValue(0.0);
+        fadeIn.setToValue(1.0);
+        fadeIn.play();
+    }
+
+    @FXML
+    public void closeAlarmManager() {
+        if (!alarmManagerLayer.isVisible()) {
+            return;
+        }
+        exitAlarmEditor();
+        FadeTransition fadeOut = new FadeTransition(Duration.millis(180), alarmManagerLayer);
+        fadeOut.setToValue(0.0);
+        fadeOut.setOnFinished(e -> alarmManagerLayer.setVisible(false));
+        fadeOut.play();
+    }
+
+    /** Closes the sheet only when the backdrop itself is clicked, not its children. */
+    @FXML
+    public void closeAlarmManagerOnOutsideClick(MouseEvent event) {
+        if (event.getTarget() == alarmManagerLayer) {
+            closeAlarmManager();
+        }
+    }
+
+    /** Keeps clicks inside the card from bubbling to the backdrop handler. */
+    @FXML
+    public void swallowAlarmCardClick(MouseEvent event) {
+        event.consume();
+    }
+
+    /**
+     * Rebuilds the alarm rows (sorted by time). Tapping a row opens the editor;
+     * toggle and delete buttons consume their clicks so they don't trigger edits.
+     */
+    private void rebuildAlarmList() {
+        alarmListContainer.getChildren().clear();
+        List<Alarm> alarms = alarmService.getAlarms();
+        alarms.sort(Comparator.comparingInt(Alarm::hour).thenComparingInt(Alarm::minute));
+
+        boolean empty = alarms.isEmpty();
+        alarmEmptyHint.setVisible(empty);
+        alarmEmptyHint.setManaged(empty);
+
+        for (Alarm alarm : alarms) {
+            HBox row = new HBox(14);
+            row.setAlignment(Pos.CENTER_LEFT);
+            row.getStyleClass().add("alarm-row");
+            if (!alarm.isEnabled()) {
+                row.getStyleClass().add("alarm-row-disabled");
+            }
+            row.setCursor(Cursor.HAND);
+            row.setOnMouseClicked(e -> openAlarmEditorFor(alarm));
+
+            Label timeLabel = new Label(alarm.displayTime());
+            timeLabel.getStyleClass().add("alarm-row-time");
+
+            VBox mid = new VBox(2);
+            String name = alarm.label();
+            String desc = name == null || name.isBlank()
+                    ? alarm.repeatDescription()
+                    : name + "  \u00b7  " + alarm.repeatDescription();
+            Label descLabel = new Label(desc);
+            descLabel.getStyleClass().add("alarm-row-desc");
+            mid.getChildren().add(descLabel);
+
+            Region spacer = new Region();
+            HBox.setHgrow(spacer, Priority.ALWAYS);
+
+            Label toggle = new Label(alarm.isEnabled() ? "ON" : "OFF");
+            toggle.getStyleClass().add(alarm.isEnabled() ? "toggle-pill-on" : "toggle-pill-off");
+            toggle.setOnMouseClicked(e -> {
+                e.consume();
+                alarm.setEnabled(!alarm.isEnabled());
+                alarmService.updateAlarm(alarm);
+                rebuildAlarmList();
+                refreshNextAlarmHint();
+            });
+
+            Label deleteBtn = new Label("\u2715");
+            deleteBtn.getStyleClass().add("alarm-delete-btn");
+            deleteBtn.setOnMouseClicked(e -> {
+                e.consume();
+                alarmService.removeAlarm(alarm.id());
+                rebuildAlarmList();
+                refreshNextAlarmHint();
+            });
+
+            row.getChildren().addAll(timeLabel, mid, spacer, toggle, deleteBtn);
+            alarmListContainer.getChildren().add(row);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Alarm Editor (touch steppers + day chips)
+    // -------------------------------------------------------------------------
+
+    @FXML
+    public void showNewAlarmEditor() {
+        editingAlarm = null;
+        LocalDateTime now = LocalDateTime.now();
+        editorHour = now.getHour();          // default: current hour
+        editorMinute = now.getMinute() < 55 ? ((now.getMinute() / 5) + 1) * 5 % 60 : 55;
+        editorOnce = false;                  // default: repeating
+        editorDays.clear();                  // empty selection = every day
+        enterAlarmEditor();
+    }
+
+    private void openAlarmEditorFor(Alarm alarm) {
+        editingAlarm = alarm;
+        editorHour = alarm.hour();
+        editorMinute = alarm.minute();
+        editorOnce = alarm.isOnce();
+        editorDays.clear();
+        editorDays.addAll(alarm.repeatDays());
+        enterAlarmEditor();
+    }
+
+    /** Mode selector: this alarm rings once and deletes itself after dismissal. */
+    @FXML
+    public void selectOnceMode() {
+        editorOnce = true;
+        refreshEditorUi();
+    }
+
+    /** Mode selector: this alarm repeats (day chips decide the pattern). */
+    @FXML
+    public void selectRepeatMode() {
+        editorOnce = false;
+        refreshEditorUi();
+    }
+
+    private void enterAlarmEditor() {
+        alarmListScroll.setVisible(false);
+        alarmListScroll.setManaged(false);
+        alarmEmptyHint.setVisible(false);
+        alarmEmptyHint.setManaged(false);
+        addAlarmButton.setVisible(false);
+        addAlarmButton.setManaged(false);
+
+        alarmEditorPane.setVisible(true);
+        alarmEditorPane.setManaged(true);
+        refreshEditorUi();
+    }
+
+    private void exitAlarmEditor() {
+        if (alarmEditorPane == null) {
+            return;
+        }
+        alarmEditorPane.setVisible(false);
+        alarmEditorPane.setManaged(false);
+        alarmListScroll.setVisible(true);
+        alarmListScroll.setManaged(true);
+        addAlarmButton.setVisible(true);
+        addAlarmButton.setManaged(true);
+        editingAlarm = null;
+    }
+
+    @FXML
+    public void incrementHour() {
+        editorHour = (editorHour + 1) % 24;
+        refreshEditorUi();
+    }
+
+    @FXML
+    public void decrementHour() {
+        editorHour = (editorHour + 23) % 24;
+        refreshEditorUi();
+    }
+
+    @FXML
+    public void incrementMinute() {
+        editorMinute = (editorMinute + 5) % 60;
+        refreshEditorUi();
+    }
+
+    @FXML
+    public void decrementMinute() {
+        editorMinute = (editorMinute + 55) % 60;
+        refreshEditorUi();
+    }
+
+    /** Builds the L M X J V S D chips once at startup (Monday-first). */
+    private void buildDayChips() {
+        DayOfWeek[] days = {
+                DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY,
+                DayOfWeek.THURSDAY, DayOfWeek.FRIDAY, DayOfWeek.SATURDAY, DayOfWeek.SUNDAY};
+        for (DayOfWeek day : days) {
+            Label chip = new Label(chipLetter(day));
+            chip.getStyleClass().add("day-chip");
+            chip.setUserData(day);
+            chip.setCursor(Cursor.HAND);
+            chip.setOnMouseClicked(e -> {
+                if (editorOnce) {
+                    return; // day chips are irrelevant in one-shot mode
+                }
+                DayOfWeek selected = (DayOfWeek) chip.getUserData();
+                if (!editorDays.remove(selected)) {
+                    editorDays.add(selected);
+                }
+                refreshEditorUi();
+            });
+            dayChips.add(chip);
+            dayChipsRow.getChildren().add(chip);
+        }
+    }
+
+    private static String chipLetter(DayOfWeek day) {
+        return switch (day) {
+            case MONDAY -> "L";
+            case TUESDAY -> "M";
+            case WEDNESDAY -> "X";
+            case THURSDAY -> "J";
+            case FRIDAY -> "V";
+            case SATURDAY -> "S";
+            case SUNDAY -> "D";
+        };
+    }
+
+    private void refreshEditorUi() {
+        editorTimePreview.setText(String.format(Locale.ROOT, "%02d:%02d", editorHour, editorMinute));
+        editorHourValue.setText(String.format(Locale.ROOT, "%02d", editorHour));
+        editorMinuteValue.setText(String.format(Locale.ROOT, "%02d", editorMinute));
+
+        // Repeat-mode selector visuals
+        styleModeButton(modeOnceButton, editorOnce);
+        styleModeButton(modeRepeatButton, !editorOnce);
+        dayChipsSection.setOpacity(editorOnce ? 0.35 : 1.0);
+
+        for (Label chip : dayChips) {
+            DayOfWeek selected = (DayOfWeek) chip.getUserData();
+            if (!editorOnce && editorDays.contains(selected)) {
+                if (!chip.getStyleClass().contains("day-chip-selected")) {
+                    chip.getStyleClass().add("day-chip-selected");
+                }
+            } else {
+                chip.getStyleClass().remove("day-chip-selected");
+            }
+        }
+
+        if (editorOnce) {
+            editorDaysHint.setText("Sonar\u00e1 solo la pr\u00f3xima vez y se borrar\u00e1 al apagarlo");
+        } else {
+            editorDaysHint.setText(editorDays.isEmpty()
+                    ? "Sin selecci\u00f3n: sonar\u00e1 todos los d\u00edas"
+                    : "Sonar\u00e1: " + describeDays(editorDays));
+        }
+    }
+
+    private void styleModeButton(Label button, boolean selected) {
+        button.getStyleClass().remove("alarm-mode-button");
+        button.getStyleClass().remove("alarm-mode-button-selected");
+        button.getStyleClass().add(selected ? "alarm-mode-button-selected" : "alarm-mode-button");
+    }
+
+    private static String describeDays(Set<DayOfWeek> days) {
+        StringBuilder sb = new StringBuilder();
+        for (DayOfWeek day : days) {
+            if (!sb.isEmpty()) {
+                sb.append(", ");
+            }
+            sb.append(chipLetter(day));
+        }
+        return sb.toString();
+    }
+
+    @FXML
+    public void cancelAlarmEditor() {
+        exitAlarmEditor();
+    }
+
+    @FXML
+    public void saveAlarmFromEditor() {
+        if (editingAlarm != null) {
+            editingAlarm.setHour(editorHour);
+            editingAlarm.setMinute(editorMinute);
+            editingAlarm.setOnce(editorOnce);
+            editingAlarm.setRepeatDays(editorOnce ? new LinkedHashSet<>() : new LinkedHashSet<>(editorDays));
+            alarmService.updateAlarm(editingAlarm);
+        } else {
+            Alarm alarm = new Alarm(editorHour, editorMinute, "",
+                    editorOnce ? new LinkedHashSet<>() : new LinkedHashSet<>(editorDays), editorOnce);
+            alarmService.addAlarm(alarm);
+        }
+        exitAlarmEditor();
+        rebuildAlarmList();
+        refreshNextAlarmHint();
+    }
+
     /**
      * Cleanly shuts down background threads and server resources.
      */
@@ -982,5 +1545,14 @@ public class AssistantController {
         stopOrbBreathing();
         stopThinkingDots();
         cancelReplyLinger();
+        stopGlowPulse();
+        if (alarmPlayer != null) {
+            try {
+                alarmPlayer.stop();
+                alarmPlayer.dispose();
+            } catch (Exception ignored) {
+            }
+            alarmPlayer = null;
+        }
     }
 }
