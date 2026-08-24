@@ -1,14 +1,25 @@
 /* ==========================================================================
-   NAVY BLUE MINIMALIST APPLICATION STYLESHEET
-   Clean, modern, high-contrast aesthetic for 1024x600 Touchscreen
+   ALPHA ASSISTANT — AURORA NAVY STYLESHEET
+   Deep navy ambience with sky-blue / violet aurora accents.
+   Glassmorphic surfaces, unified radii (14/18/22/28), soft depth.
+   Optimized for a 1024x600 Raspberry Pi touchscreen (opacity/transform
+   animations only; no per-frame blurs).
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
-   Root Container & Deep Navy Blue Ambient Background
+   Root & Ambient Background
+   Layered paints render back-to-front: opaque navy first,
+   translucent aurora glows on top.
    -------------------------------------------------------------------------- */
 .root {
     -fx-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Ubuntu", Cantarell, sans-serif;
-    -fx-background-color: radial-gradient(focus-angle 0.0deg, focus-distance 0.0%, center 20.0% 20.0%, radius 100.0%, #132a4a 0.0%, #0a192f 50.0%, #050d18 100.0%);
+    -fx-background-color:
+        radial-gradient(focus-angle 0.0deg, focus-distance 0.0%, center 88.0% 6.0%, radius 52.0%,
+            rgba(56, 189, 248, 0.10) 0.0%, transparent 62.0%),
+        radial-gradient(focus-angle 0.0deg, focus-distance 0.0%, center 8.0% 96.0%, radius 58.0%,
+            rgba(139, 92, 246, 0.11) 0.0%, transparent 64.0%),
+        radial-gradient(focus-angle 0.0deg, focus-distance 0.0%, center 20.0% 18.0%, radius 100.0%,
+            #14294a 0.0%, #0a192f 48.0%, #040d1c 100.0%);
 }
 
 .root-container {
@@ -16,24 +27,24 @@
 }
 
 /* --------------------------------------------------------------------------
-   Top-Left Minimalist Information Display (Time, Date, Weather)
+   Home Screen: Clock, Date, Weather
    -------------------------------------------------------------------------- */
 .minimal-clock {
     -fx-font-size: 96px;
     -fx-font-weight: 800;
     -fx-text-fill: #ffffff;
-    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.45), 12, 0, 0, 4);
+    -fx-effect: dropshadow(gaussian, rgba(2, 8, 20, 0.55), 14, 0, 0, 5);
 }
 
 .minimal-date {
     -fx-font-size: 28px;
     -fx-font-weight: 700;
-    -fx-text-fill: #38bdf8; /* Vivid Sky Blue */
-    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.3), 8, 0, 0, 2);
+    -fx-text-fill: #38bdf8;
+    -fx-effect: dropshadow(gaussian, rgba(56, 189, 248, 0.25), 16, 0, 0, 2);
 }
 
 .minimal-weather-row {
-    -fx-padding: 8px 0 0 0;
+    -fx-padding: 10px 0 0 0;
 }
 
 .minimal-weather-icon {
@@ -48,7 +59,7 @@
 
 .minimal-weather-dot {
     -fx-font-size: 18px;
-    -fx-text-fill: #475569;
+    -fx-text-fill: #3b527a;
 }
 
 .minimal-weather-desc {
@@ -59,58 +70,89 @@
 
 .minimal-weather-city {
     -fx-font-size: 20px;
-    -fx-font-weight: 500;
-    -fx-text-fill: #94a3b8;
+    -fx-font-weight: 600;
+    -fx-text-fill: #7d93b5;
 }
 
 /* --------------------------------------------------------------------------
-   Notification Banner (Floating Pill)
+   Alpha Speech Bubble (remote messages from Telegram / HTTP API)
+   Alpha "says" every message through her avatar; glass card with a
+   violet aura, speech tail rendered in the FXML using the same fill.
    -------------------------------------------------------------------------- */
-.notification-banner {
-    -fx-background-color: rgba(245, 158, 11, 0.2);
-    -fx-border-color: rgba(245, 158, 11, 0.6);
-    -fx-border-radius: 16px;
-    -fx-background-radius: 16px;
+.notification-bubble {
+    -fx-background-color: linear-gradient(to bottom right,
+            rgba(30, 50, 86, 0.97) 0.0%, rgba(16, 31, 56, 0.97) 100.0%);
+    -fx-border-color: rgba(167, 139, 250, 0.38);
     -fx-border-width: 1.5px;
-    -fx-padding: 12px 24px;
-    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.5), 18, 0, 0, 6);
+    -fx-background-radius: 26px;
+    -fx-border-radius: 26px;
+    -fx-padding: 16px 24px 16px 16px;
+    -fx-effect: dropshadow(gaussian, rgba(88, 28, 135, 0.35), 26, 0.05, 0, 10),
+                dropshadow(gaussian, rgba(2, 8, 20, 0.65), 22, 0, 0, 8);
+}
+
+.notification-avatar {
+    -fx-background-color: radial-gradient(focus-angle 0.0deg, focus-distance 0.0%, center 32.0% 28.0%, radius 95.0%,
+            #8b5cf6 0.0%, #6d28d9 55.0%, #4c1d95 100.0%);
+    -fx-background-radius: 50%;
+    -fx-border-color: rgba(196, 181, 253, 0.75);
+    -fx-border-radius: 50%;
+    -fx-border-width: 1.5px;
+    -fx-effect: dropshadow(gaussian, rgba(124, 58, 237, 0.45), 16, 0, 0, 4);
+}
+
+.notification-avatar-glow {
+    -fx-background-color: radial-gradient(focus-angle 0.0deg, focus-distance 0.0%, center 50.0% 50.0%, radius 50.0%,
+            rgba(167, 139, 250, 0.85) 0.0%, transparent 100.0%);
+    -fx-background-radius: 50%;
+}
+
+.notification-author {
+    -fx-text-fill: #c084fc;
+    -fx-font-size: 12px;
+    -fx-font-weight: 800;
+    -fx-letter-spacing: 3px;
 }
 
 .notification-text {
-    -fx-font-size: 20px;
-    -fx-font-weight: bold;
-    -fx-text-fill: #fef08a;
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 21px;
+    -fx-font-weight: 600;
 }
 
 .notification-close-btn {
-    -fx-font-size: 18px;
+    -fx-font-size: 17px;
     -fx-font-weight: bold;
-    -fx-text-fill: #fef08a;
-    -fx-padding: 4px 10px;
-    -fx-background-color: rgba(255, 255, 255, 0.1);
-    -fx-background-radius: 12px;
+    -fx-text-fill: #a5b4cf;
+    -fx-padding: 6px 12px;
+    -fx-background-color: rgba(255, 255, 255, 0.07);
+    -fx-background-radius: 14px;
     -fx-cursor: hand;
 }
 
 .notification-close-btn:hover {
-    -fx-background-color: rgba(255, 255, 255, 0.25);
+    -fx-background-color: rgba(167, 139, 250, 0.30);
     -fx-text-fill: #ffffff;
 }
 
 /* --------------------------------------------------------------------------
-   Spotify Fullscreen Screen Styles
+   Spotify Fullscreen
    -------------------------------------------------------------------------- */
 .spotify-background {
-    -fx-background-color: radial-gradient(focus-angle 0.0deg, focus-distance 0.0%, center 25.0% 25.0%, radius 100.0%, #122822 0.0%, #0a192f 50.0%, #050d18 100.0%);
+    -fx-background-color:
+        radial-gradient(focus-angle 0.0deg, focus-distance 0.0%, center 80.0% 90.0%, radius 60.0%,
+            rgba(29, 185, 84, 0.10) 0.0%, transparent 65.0%),
+        radial-gradient(focus-angle 0.0deg, focus-distance 0.0%, center 25.0% 25.0%, radius 100.0%,
+            #10281f 0.0%, #0a1626 48.0%, #04101c 100.0%);
 }
 
 .spotify-speaker-badge {
-    -fx-background-color: rgba(29, 185, 84, 0.18);
-    -fx-background-radius: 20px;
-    -fx-border-color: rgba(29, 185, 84, 0.5);
-    -fx-border-radius: 20px;
+    -fx-background-color: rgba(29, 185, 84, 0.15);
+    -fx-background-radius: 22px;
+    -fx-border-color: rgba(29, 185, 84, 0.45);
+    -fx-border-radius: 22px;
     -fx-border-width: 1px;
-    -fx-padding: 6px 16px;
+    -fx-padding: 7px 18px;
 }
 
 .spotify-speaker-text {
@@ -120,37 +162,50 @@
 }
 
 .spotify-art-card {
-    -fx-background-color: #101c2e;
-    -fx-background-radius: 20px;
-    -fx-border-radius: 20px;
-    -fx-border-color: rgba(255, 255, 255, 0.1);
+    -fx-background-color: #0e1a2c;
+    -fx-background-radius: 24px;
+    -fx-border-radius: 24px;
+    -fx-border-color: rgba(255, 255, 255, 0.12);
     -fx-border-width: 1px;
-    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.7), 25, 0, 0, 10);
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.75), 28, 0.05, 0, 12);
 }
 
 .spotify-status-tag {
     -fx-text-fill: #1ed760;
     -fx-font-size: 13px;
     -fx-font-weight: 800;
-    -fx-letter-spacing: 2px;
+    -fx-letter-spacing: 3px;
 }
 
 .spotify-song-title {
     -fx-text-fill: #ffffff;
-    -fx-font-size: 32px;
+    -fx-font-size: 34px;
     -fx-font-weight: 800;
 }
 
 .spotify-artist-title {
     -fx-text-fill: #1ed760;
-    -fx-font-size: 22px;
+    -fx-font-size: 23px;
     -fx-font-weight: 700;
 }
 
 .spotify-album-title {
-    -fx-text-fill: #94a3b8;
+    -fx-text-fill: #8ba1bd;
     -fx-font-size: 16px;
     -fx-font-weight: 500;
+}
+
+.spotify-intro-title {
+    -fx-text-fill: #1ed760;
+    -fx-font-size: 26px;
+    -fx-font-weight: bold;
+    -fx-letter-spacing: 1px;
+    -fx-padding: 30px 0 0 0;
+}
+
+.spotify-intro-subtitle {
+    -fx-text-fill: #8ba1bd;
+    -fx-font-size: 16px;
 }
 
 /* --------------------------------------------------------------------------
@@ -159,7 +214,7 @@
    idle=sky-blue, listening=green, processing=amber, speaking=purple, error=red
    -------------------------------------------------------------------------- */
 .voice-orb {
-    -fx-background-color: rgba(56, 189, 248, 0.15);
+    -fx-background-color: rgba(56, 189, 248, 0.14);
     -fx-border-color: rgba(56, 189, 248, 0.55);
     -fx-background-radius: 34px;
     -fx-border-radius: 34px;
@@ -169,7 +224,7 @@
 }
 
 .voice-orb:hover {
-    -fx-background-color: rgba(56, 189, 248, 0.28);
+    -fx-background-color: rgba(56, 189, 248, 0.26);
 }
 
 .voice-orb-muted {
@@ -180,13 +235,13 @@
 }
 
 .voice-card {
-    -fx-background-color: rgba(10, 25, 47, 0.85);
-    -fx-border-color: rgba(148, 163, 184, 0.25);
-    -fx-background-radius: 22px;
-    -fx-border-radius: 22px;
+    -fx-background-color: rgba(13, 27, 52, 0.82);
+    -fx-border-color: rgba(148, 163, 184, 0.22);
+    -fx-background-radius: 24px;
+    -fx-border-radius: 24px;
     -fx-border-width: 1px;
     -fx-padding: 18px 26px;
-    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.6), 24, 0, 0, 8);
+    -fx-effect: dropshadow(gaussian, rgba(2, 8, 20, 0.65), 26, 0.05, 0, 9);
 }
 
 .voice-status-text {
@@ -201,8 +256,8 @@
 }
 
 .voice-bubble-user {
-    -fx-background-color: rgba(56, 189, 248, 0.16);
-    -fx-border-color: rgba(56, 189, 248, 0.4);
+    -fx-background-color: rgba(56, 189, 248, 0.14);
+    -fx-border-color: rgba(56, 189, 248, 0.38);
     -fx-background-radius: 16px;
     -fx-border-radius: 16px;
     -fx-border-width: 1px;
@@ -210,15 +265,15 @@
 }
 
 .voice-bubble-user-author {
-    -fx-text-fill: #38bdf8;
+    -fx-text-fill: #7dd3fc;
     -fx-font-size: 11px;
     -fx-font-weight: 800;
     -fx-letter-spacing: 2px;
 }
 
 .voice-bubble-alpha {
-    -fx-background-color: rgba(168, 85, 247, 0.16);
-    -fx-border-color: rgba(168, 85, 247, 0.4);
+    -fx-background-color: rgba(168, 85, 247, 0.15);
+    -fx-border-color: rgba(168, 85, 247, 0.38);
     -fx-background-radius: 16px;
     -fx-border-radius: 16px;
     -fx-border-width: 1px;
@@ -246,13 +301,19 @@
 }
 
 .next-alarm-text {
-    -fx-text-fill: #94a3b8;
+    -fx-text-fill: #8ba1bd;
+    -fx-font-size: 16px;
+    -fx-font-weight: 600;
+}
+
+.next-event-text {
+    -fx-text-fill: #8ba1bd;
     -fx-font-size: 16px;
     -fx-font-weight: 600;
 }
 
 .alarm-clock-button {
-    -fx-background-color: rgba(56, 189, 248, 0.15);
+    -fx-background-color: rgba(56, 189, 248, 0.14);
     -fx-border-color: rgba(56, 189, 248, 0.55);
     -fx-background-radius: 34px;
     -fx-border-radius: 34px;
@@ -262,24 +323,224 @@
 }
 
 .alarm-clock-button:hover {
-    -fx-background-color: rgba(56, 189, 248, 0.28);
+    -fx-background-color: rgba(56, 189, 248, 0.26);
+}
+
+.spotify-link-button {
+    -fx-background-color: rgba(29, 185, 84, 0.14);
+    -fx-border-color: rgba(29, 185, 84, 0.55);
+    -fx-background-radius: 34px;
+    -fx-border-radius: 34px;
+    -fx-border-width: 1.5px;
+    -fx-padding: 18px;
+    -fx-cursor: hand;
+}
+
+.spotify-link-button:hover {
+    -fx-background-color: rgba(29, 185, 84, 0.28);
+}
+
+/* --------------------------------------------------------------------------
+   Spotify QR Login Sheet (Modal Card)
+   -------------------------------------------------------------------------- */
+.spotify-auth-card {
+    -fx-background-color: rgba(13, 27, 52, 0.96);
+    -fx-border-color: rgba(29, 185, 84, 0.4);
+    -fx-border-width: 1px;
+    -fx-background-radius: 28px;
+    -fx-border-radius: 28px;
+    -fx-padding: 22px 34px;
+    -fx-spacing: 14px;
+    -fx-effect: dropshadow(gaussian, rgba(2, 8, 20, 0.7), 32, 0.05, 0, 12);
+}
+
+.spotify-auth-title {
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 30px;
+    -fx-font-weight: 800;
+}
+
+.spotify-auth-qr-panel {
+    -fx-background-color: #f8fafc;
+    -fx-background-radius: 18px;
+    -fx-padding: 16px;
+}
+
+.spotify-auth-hint {
+    -fx-text-fill: #e2e8f0;
+    -fx-font-size: 15px;
+    -fx-font-weight: 500;
+    -fx-alignment: center;
+}
+
+.spotify-auth-status {
+    -fx-text-fill: #94a3b8;
+    -fx-font-size: 14px;
+    -fx-font-weight: 600;
+}
+
+/* --------------------------------------------------------------------------
+   Calendar Screen (Full-screen agenda)
+   -------------------------------------------------------------------------- */
+.calendar-button {
+    -fx-background-color: rgba(168, 85, 247, 0.14);
+    -fx-border-color: rgba(168, 85, 247, 0.55);
+    -fx-background-radius: 34px;
+    -fx-border-radius: 34px;
+    -fx-border-width: 1.5px;
+    -fx-padding: 18px;
+    -fx-cursor: hand;
+}
+
+.calendar-button:hover {
+    -fx-background-color: rgba(168, 85, 247, 0.28);
+}
+
+.calendar-badge {
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 12px;
+    -fx-font-weight: 800;
+    -fx-background-color: #a855f7;
+    -fx-background-radius: 11px;
+    -fx-border-radius: 11px;
+    -fx-border-color: rgba(13, 27, 52, 0.9);
+    -fx-border-width: 1.5px;
+    -fx-min-width: 22px;
+    -fx-min-height: 22px;
+    -fx-alignment: center;
+    -fx-padding: 0px 4px;
+}
+
+.calendar-card {
+    -fx-background-color: rgba(13, 27, 52, 0.97);
+    -fx-border-color: rgba(148, 163, 184, 0.22);
+    -fx-border-width: 1px;
+    -fx-background-radius: 28px;
+    -fx-border-radius: 28px;
+    -fx-padding: 18px 24px;
+    -fx-effect: dropshadow(gaussian, rgba(2, 8, 20, 0.7), 32, 0.05, 0, 12);
+}
+
+.calendar-title {
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 30px;
+    -fx-font-weight: 800;
+}
+
+.calendar-nav-button {
+    -fx-text-fill: #e2e8f0;
+    -fx-font-size: 40px;
+    -fx-font-weight: bold;
+    -fx-padding: 4px 26px;
+    -fx-background-color: rgba(255, 255, 255, 0.07);
+    -fx-background-radius: 16px;
+    -fx-cursor: hand;
+}
+
+.calendar-nav-button:hover {
+    -fx-background-color: rgba(168, 85, 247, 0.35);
+}
+
+.calendar-weekday {
+    -fx-text-fill: #64748b;
+    -fx-font-size: 16px;
+    -fx-font-weight: 700;
+}
+
+.cal-day {
+    -fx-min-width: 82px;
+    -fx-min-height: 64px;
+    -fx-alignment: top-center;
+    -fx-spacing: 4px;
+    -fx-padding: 7px 0 4px 0;
+    -fx-background-radius: 14px;
+    -fx-border-radius: 14px;
+    -fx-border-width: 0px;
+    -fx-border-color: transparent;
+    -fx-cursor: hand;
+}
+
+.cal-day-number {
+    -fx-text-fill: #e2e8f0;
+    -fx-font-size: 19px;
+    -fx-font-weight: 700;
+}
+
+.cal-day-other .cal-day-number {
+    -fx-text-fill: #475569;
+}
+
+.cal-day-today {
+    -fx-border-width: 1.5px;
+    -fx-border-color: rgba(56, 189, 248, 0.8);
+}
+
+.cal-day-selected {
+    -fx-background-color: rgba(56, 189, 248, 0.22);
+}
+
+.cal-dots-row {
+    -fx-spacing: 3px;
+    -fx-alignment: center;
+}
+
+.cal-dot {
+    -fx-min-width: 6px;
+    -fx-min-height: 6px;
+    -fx-background-radius: 3px;
+    -fx-max-width: 6px;
+    -fx-max-height: 6px;
+}
+
+.cal-event-card {
+    -fx-background-color: rgba(30, 41, 59, 0.75);
+    -fx-border-color: rgba(148, 163, 184, 0.25);
+    -fx-border-width: 1px;
+    -fx-background-radius: 16px;
+    -fx-border-radius: 16px;
+    -fx-padding: 12px 18px;
+    -fx-spacing: 3px;
+}
+
+.cal-event-time {
+    -fx-text-fill: #38bdf8;
+    -fx-font-size: 14px;
+    -fx-font-weight: 700;
+}
+
+.cal-event-title {
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 17px;
+    -fx-font-weight: 600;
+}
+
+.calendar-selected-date {
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 22px;
+    -fx-font-weight: 800;
+}
+
+.cal-empty-hint {
+    -fx-text-fill: #94a3b8;
+    -fx-font-size: 15px;
+    -fx-padding: 18px 4px;
 }
 
 /* --------------------------------------------------------------------------
    Alarms: Manager Sheet (Modal Card)
    -------------------------------------------------------------------------- */
 .alarm-sheet-backdrop {
-    -fx-background-color: rgba(2, 6, 23, 0.62);
+    -fx-background-color: rgba(2, 6, 23, 0.66);
 }
 
 .alarm-sheet-card {
-    -fx-background-color: rgba(10, 25, 47, 0.97);
-    -fx-border-color: rgba(148, 163, 184, 0.25);
+    -fx-background-color: rgba(13, 27, 52, 0.96);
+    -fx-border-color: rgba(148, 163, 184, 0.22);
     -fx-border-width: 1px;
     -fx-background-radius: 28px;
     -fx-border-radius: 28px;
-    -fx-padding: 20px 32px;
-    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.65), 30, 0, 0, 12);
+    -fx-padding: 22px 34px;
+    -fx-effect: dropshadow(gaussian, rgba(2, 8, 20, 0.7), 32, 0.05, 0, 12);
 }
 
 .alarm-sheet-title {
@@ -293,7 +554,7 @@
     -fx-font-weight: bold;
     -fx-text-fill: #cbd5e1;
     -fx-padding: 8px 18px;
-    -fx-background-color: rgba(255, 255, 255, 0.08);
+    -fx-background-color: rgba(255, 255, 255, 0.07);
     -fx-background-radius: 14px;
     -fx-cursor: hand;
 }
@@ -319,23 +580,24 @@
 }
 
 .add-alarm-button {
-    -fx-text-fill: #ffffff;
+    -fx-text-fill: #06121f;
     -fx-font-size: 26px;
     -fx-font-weight: bold;
-    -fx-background-color: rgba(56, 189, 248, 0.85);
-    -fx-background-radius: 20px;
+    -fx-background-color: linear-gradient(to bottom right, #38bdf8 0.0%, #0ea5e9 100.0%);
+    -fx-background-radius: 22px;
     -fx-padding: 18px 44px;
     -fx-cursor: hand;
+    -fx-effect: dropshadow(gaussian, rgba(56, 189, 248, 0.35), 18, 0, 0, 5);
 }
 
 .add-alarm-button:hover {
-    -fx-background-color: #38bdf8;
+    -fx-background-color: linear-gradient(to bottom right, #7dd3fc 0.0%, #38bdf8 100.0%);
 }
 
 /* Rows inside the alarm list (built in code) */
 .alarm-row {
-    -fx-background-color: rgba(255, 255, 255, 0.05);
-    -fx-border-color: rgba(148, 163, 184, 0.18);
+    -fx-background-color: rgba(255, 255, 255, 0.045);
+    -fx-border-color: rgba(148, 163, 184, 0.16);
     -fx-border-width: 1px;
     -fx-background-radius: 20px;
     -fx-border-radius: 20px;
@@ -353,13 +615,13 @@
 }
 
 .alarm-row-desc {
-    -fx-text-fill: #94a3b8;
+    -fx-text-fill: #8ba1bd;
     -fx-font-size: 19px;
     -fx-font-weight: 600;
 }
 
 .toggle-pill-on {
-    -fx-text-fill: #0a192f;
+    -fx-text-fill: #05261a;
     -fx-font-size: 17px;
     -fx-font-weight: 800;
     -fx-background-color: #34d399;
@@ -372,7 +634,7 @@
     -fx-text-fill: #cbd5e1;
     -fx-font-size: 17px;
     -fx-font-weight: 800;
-    -fx-background-color: rgba(148, 163, 184, 0.25);
+    -fx-background-color: rgba(148, 163, 184, 0.22);
     -fx-background-radius: 16px;
     -fx-padding: 10px 24px;
     -fx-cursor: hand;
@@ -382,14 +644,14 @@
     -fx-text-fill: #f87171;
     -fx-font-size: 22px;
     -fx-font-weight: bold;
-    -fx-background-color: rgba(239, 68, 68, 0.14);
+    -fx-background-color: rgba(239, 68, 68, 0.13);
     -fx-background-radius: 16px;
     -fx-padding: 10px 20px;
     -fx-cursor: hand;
 }
 
 .alarm-delete-btn:hover {
-    -fx-background-color: rgba(239, 68, 68, 0.35);
+    -fx-background-color: rgba(239, 68, 68, 0.32);
     -fx-text-fill: #fecaca;
 }
 
@@ -410,7 +672,7 @@
 }
 
 .alarm-stepper-caption {
-    -fx-text-fill: #94a3b8;
+    -fx-text-fill: #8ba1bd;
     -fx-font-size: 15px;
     -fx-font-weight: 700;
 }
@@ -419,14 +681,14 @@
     -fx-text-fill: #e2e8f0;
     -fx-font-size: 24px;
     -fx-font-weight: 800;
-    -fx-background-color: rgba(148, 163, 184, 0.2);
+    -fx-background-color: rgba(148, 163, 184, 0.18);
     -fx-background-radius: 14px;
     -fx-padding: 4px 24px;
     -fx-cursor: hand;
 }
 
 .stepper-button:hover {
-    -fx-background-color: rgba(56, 189, 248, 0.35);
+    -fx-background-color: rgba(56, 189, 248, 0.32);
 }
 
 .stepper-value {
@@ -442,8 +704,8 @@
     -fx-text-fill: #cbd5e1;
     -fx-font-size: 17px;
     -fx-font-weight: 700;
-    -fx-background-color: rgba(148, 163, 184, 0.14);
-    -fx-border-color: rgba(148, 163, 184, 0.3);
+    -fx-background-color: rgba(148, 163, 184, 0.12);
+    -fx-border-color: rgba(148, 163, 184, 0.28);
     -fx-border-width: 1px;
     -fx-background-radius: 14px;
     -fx-border-radius: 14px;
@@ -452,7 +714,7 @@
 }
 
 .alarm-mode-button-selected {
-    -fx-text-fill: #052e16;
+    -fx-text-fill: #05261a;
     -fx-font-size: 17px;
     -fx-font-weight: 800;
     -fx-background-color: #34d399;
@@ -465,10 +727,10 @@
 }
 
 .day-chip {
-    -fx-text-fill: #94a3b8;
+    -fx-text-fill: #8ba1bd;
     -fx-font-size: 16px;
     -fx-font-weight: 700;
-    -fx-background-color: rgba(148, 163, 184, 0.14);
+    -fx-background-color: rgba(148, 163, 184, 0.12);
     -fx-background-radius: 50%;
     -fx-border-radius: 50%;
     -fx-padding: 0px;
@@ -479,7 +741,7 @@
 }
 
 .day-chip-selected {
-    -fx-text-fill: #0a192f;
+    -fx-text-fill: #06121f;
     -fx-background-color: #38bdf8;
 }
 
@@ -492,7 +754,7 @@
     -fx-text-fill: #cbd5e1;
     -fx-font-size: 19px;
     -fx-font-weight: bold;
-    -fx-background-color: rgba(148, 163, 184, 0.18);
+    -fx-background-color: rgba(148, 163, 184, 0.16);
     -fx-background-radius: 14px;
     -fx-padding: 11px 32px;
     -fx-cursor: hand;
@@ -500,11 +762,11 @@
 
 .alarm-editor-cancel:hover {
     -fx-text-fill: #e2e8f0;
-    -fx-background-color: rgba(148, 163, 184, 0.3);
+    -fx-background-color: rgba(148, 163, 184, 0.28);
 }
 
 .alarm-editor-save {
-    -fx-text-fill: #052e16;
+    -fx-text-fill: #05261a;
     -fx-font-size: 19px;
     -fx-font-weight: 800;
     -fx-background-color: #34d399;
@@ -519,14 +781,19 @@
 
 /* --------------------------------------------------------------------------
    Alarm Ring Overlay (Full-screen when an alarm fires)
-   Deep warm gradient + pulsing glow; big time and two large touch targets.
+   Warm purple-to-dusk gradient + pulsing glow; big time, large touch targets.
    -------------------------------------------------------------------------- */
 .alarm-ring-background {
-    -fx-background-color: radial-gradient(focus-angle 0.0deg, focus-distance 0.0%, center 50.0% 40.0%, radius 100.0%, #4c1d95 0.0%, #1e1b4b 45.0%, #050d18 100%);
+    -fx-background-color:
+        radial-gradient(focus-angle 0.0deg, focus-distance 0.0%, center 85.0% 95.0%, radius 55.0%,
+            rgba(251, 146, 60, 0.10) 0.0%, transparent 62.0%),
+        radial-gradient(focus-angle 0.0deg, focus-distance 0.0%, center 50.0% 40.0%, radius 100.0%,
+            #4c1d95 0.0%, #1e1b4b 45.0%, #050d18 100.0%);
 }
 
 .alarm-glow {
-    -fx-background-color: radial-gradient(focus-angle 0.0deg, focus-distance 0.0%, center 50.0% 42.0%, radius 55.0%, rgba(251, 146, 60, 0.35) 0.0%, rgba(251, 113, 133, 0.12) 55.0%, transparent 100.0%);
+    -fx-background-color: radial-gradient(focus-angle 0.0deg, focus-distance 0.0%, center 50.0% 42.0%, radius 55.0%,
+        rgba(251, 146, 60, 0.35) 0.0%, rgba(251, 113, 133, 0.12) 55.0%, transparent 100.0%);
 }
 
 .alarm-ring-icon {
@@ -537,20 +804,21 @@
     -fx-font-size: 150px;
     -fx-font-weight: 800;
     -fx-text-fill: #ffffff;
-    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.55), 18, 0, 0, 6);
+    -fx-effect: dropshadow(gaussian, rgba(2, 8, 20, 0.6), 20, 0, 0, 7);
 }
 
 .alarm-ring-title {
     -fx-text-fill: #fdba74;
     -fx-font-size: 28px;
     -fx-font-weight: 700;
+    -fx-letter-spacing: 1px;
 }
 
 .alarm-snooze-button {
     -fx-text-fill: #fef3c7;
     -fx-font-size: 25px;
     -fx-font-weight: bold;
-    -fx-background-color: rgba(245, 158, 11, 0.28);
+    -fx-background-color: rgba(245, 158, 11, 0.26);
     -fx-border-color: rgba(245, 158, 11, 0.65);
     -fx-border-width: 1.5px;
     -fx-background-radius: 50px;
@@ -560,11 +828,11 @@
 }
 
 .alarm-snooze-button:hover {
-    -fx-background-color: rgba(245, 158, 11, 0.45);
+    -fx-background-color: rgba(245, 158, 11, 0.42);
 }
 
 .alarm-dismiss-button {
-    -fx-text-fill: #052e16;
+    -fx-text-fill: #05261a;
     -fx-font-size: 25px;
     -fx-font-weight: 800;
     -fx-background-color: #34d399;

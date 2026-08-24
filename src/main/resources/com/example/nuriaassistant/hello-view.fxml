@@ -70,6 +70,16 @@
                        text=""
                        styleClass="next-alarm-text"/>
             </HBox>
+
+            <!-- 5. Next Calendar Event Hint (subtle, same family) -->
+            <HBox fx:id="nextEventRow" visible="false"
+                  alignment="CENTER_LEFT" spacing="8.0">
+                <Label text="&#128197;"
+                       styleClass="next-alarm-icon"/>
+                <Label fx:id="nextEventLabel"
+                       text=""
+                       styleClass="next-event-text"/>
+            </HBox>
         </VBox>
     </AnchorPane>
 
@@ -160,9 +170,9 @@
                      fill="#1DB954" scaleX="6.0" scaleY="6.0"/>
 
             <Label text="Spotify Connect"
-                   style="-fx-text-fill: #1DB954; -fx-font-size: 26px; -fx-font-weight: bold; -fx-padding: 30px 0 0 0;"/>
+                   styleClass="spotify-intro-title"/>
             <Label text="Raspberry Pi Speaker Active"
-                   style="-fx-text-fill: #94a3b8; -fx-font-size: 16px;"/>
+                   styleClass="spotify-intro-subtitle"/>
         </VBox>
     </StackPane>
 
@@ -172,7 +182,7 @@
                 AnchorPane.topAnchor="0.0" AnchorPane.bottomAnchor="0.0"
                 AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0">
 
-        <!-- Top-Right Row: Alarm Clock Button + Ambient Mic Orb / Mute Button -->
+        <!-- Top-Right Row: Alarm Clock Button + Spotify Link Button + Ambient Mic Orb / Mute Button -->
         <HBox alignment="CENTER_LEFT" spacing="14.0"
               AnchorPane.topAnchor="26.0"
               AnchorPane.rightAnchor="30.0">
@@ -183,6 +193,29 @@
                   onMouseClicked="#openAlarmManager">
                 <SVGPath content="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"
                          fill="#38bdf8" scaleX="1.5" scaleY="1.5"/>
+            </HBox>
+
+            <!-- Spotify Link Entry (Spotify icon, opens QR login sheet) -->
+            <HBox alignment="CENTER"
+                  styleClass="spotify-link-button"
+                  onMouseClicked="#openSpotifyAuth">
+                <SVGPath content="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.508 17.302c-.216.353-.674.468-1.027.252-2.822-1.724-6.375-2.114-10.559-1.158-.403.092-.807-.16-.899-.562-.092-.403.16-.807.562-.899 4.582-1.047 8.513-.598 11.671 1.34.353.216.468.674.252 1.027zm1.47-3.262c-.272.443-.852.585-1.295.313-3.23-1.986-8.156-2.56-11.977-1.399-.499.151-1.031-.131-1.182-.63-.151-.499.131-1.031.63-1.182 4.373-1.328 9.805-.688 13.511 1.593.443.272.585.852.313 1.295zm.126-3.411c-3.874-2.3-10.264-2.512-13.966-1.388-.593.18-1.226-.156-1.406-.749-.18-.593.156-1.226.749-1.406 4.251-1.291 11.31-1.043 15.772 1.606.533.317.708 1.008.391 1.541-.317.533-1.008.708-1.54.391z"
+                         fill="#1DB954" scaleX="1.35" scaleY="1.35"/>
+            </HBox>
+
+            <!-- Calendar Entry (calendar icon + upcoming-events badge, opens the full-screen agenda) -->
+            <HBox alignment="CENTER"
+                  styleClass="calendar-button"
+                  onMouseClicked="#openCalendarScreen">
+                <StackPane>
+                    <SVGPath content="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zM9 14H7v-2h2v2zm4 0h-2v-2h2v2zm4 0h-2v-2h2v2zm-8 4H7v-2h2v2zm4 0h-2v-2h2v2zm4 0h-2v-2h2v2z"
+                             fill="#a855f7" scaleX="1.35" scaleY="1.35"/>
+                    <Label fx:id="calendarBadgeLabel" visible="false"
+                           text="0"
+                           StackPane.alignment="TOP_RIGHT"
+                           translateX="10.0" translateY="-3.0"
+                           styleClass="calendar-badge"/>
+                </StackPane>
             </HBox>
 
             <!-- Ambient Mic Orb / Mute Button (Collapsed state) -->
@@ -255,30 +288,162 @@
         </HBox>
     </AnchorPane>
 
-    <!-- Notification Banner (Topmost transient alert; tap ✕ to dismiss) -->
-    <HBox fx:id="notificationBanner"
-          visible="false"
-          alignment="CENTER_LEFT" spacing="14.0"
-          styleClass="notification-banner"
-          AnchorPane.bottomAnchor="30.0"
+    <!-- Spotify QR Login Sheet (Modal: scan with the phone to authorize) -->
+    <AnchorPane fx:id="spotifyAuthLayer"
+                visible="false"
+                styleClass="alarm-sheet-backdrop"
+                onMouseClicked="#closeSpotifyAuthOnOutsideClick"
+                AnchorPane.topAnchor="0.0" AnchorPane.bottomAnchor="0.0"
+                AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0">
+
+        <VBox fx:id="spotifyAuthCard"
+              alignment="TOP_CENTER" spacing="14.0"
+              styleClass="spotify-auth-card"
+              onMouseClicked="#swallowSpotifyAuthClick"
+              AnchorPane.topAnchor="40.0" AnchorPane.bottomAnchor="40.0"
+              AnchorPane.leftAnchor="180.0" AnchorPane.rightAnchor="180.0">
+
+            <HBox alignment="CENTER_LEFT" spacing="12.0">
+                <SVGPath content="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.508 17.302c-.216.353-.674.468-1.027.252-2.822-1.724-6.375-2.114-10.559-1.158-.403.092-.807-.16-.899-.562-.092-.403.16-.807.562-.899 4.582-1.047 8.513-.598 11.671 1.34.353.216.468.674.252 1.027zm1.47-3.262c-.272.443-.852.585-1.295.313-3.23-1.986-8.156-2.56-11.977-1.399-.499.151-1.031-.131-1.182-.63-.151-.499.131-1.031.63-1.182 4.373-1.328 9.805-.688 13.511 1.593.443.272.585.852.313 1.295zm.126-3.411c-3.874-2.3-10.264-2.512-13.966-1.388-.593.18-1.226-.156-1.406-.749-.18-.593.156-1.226.749-1.406 4.251-1.291 11.31-1.043 15.772 1.606.533.317.708 1.008.391 1.541-.317.533-1.008.708-1.54.391z"
+                         fill="#1DB954" scaleX="1.4" scaleY="1.4"/>
+                <Label text="Vincular Spotify" styleClass="spotify-auth-title"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Label text="&#10005;"
+                       onMouseClicked="#closeSpotifyAuth"
+                       styleClass="alarm-sheet-close"/>
+            </HBox>
+
+            <!-- QR code (white panel for scanner contrast; rendered dynamically) -->
+            <StackPane styleClass="spotify-auth-qr-panel">
+                <ImageView fx:id="spotifyAuthQrView"
+                           fitWidth="300.0" fitHeight="300.0"
+                           preserveRatio="true"
+                           smooth="false"/>
+            </StackPane>
+
+            <Label text="Escanea con la c&#225;mara del m&#243;vil y haz login con tu cuenta Spotify"
+                   wrapText="true" textAlignment="CENTER"
+                   styleClass="spotify-auth-hint"/>
+
+            <Label fx:id="spotifyAuthStatusLabel"
+                   text="Esperando conexi&#243;n..."
+                   styleClass="spotify-auth-status"/>
+        </VBox>
+    </AnchorPane>
+
+    <!-- Calendar Screen (Full-screen agenda: month grid + day event list) -->
+    <AnchorPane fx:id="calendarLayer"
+                visible="false"
+                styleClass="alarm-sheet-backdrop"
+                onMouseClicked="#closeCalendarOnOutsideClick"
+                AnchorPane.topAnchor="0.0" AnchorPane.bottomAnchor="0.0"
+                AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0">
+
+        <VBox fx:id="calendarCard"
+              spacing="14.0"
+              styleClass="calendar-card"
+              onMouseClicked="#swallowCalendarClick"
+              AnchorPane.topAnchor="12.0" AnchorPane.bottomAnchor="12.0"
+              AnchorPane.leftAnchor="14.0" AnchorPane.rightAnchor="14.0">
+
+            <!-- Header: month navigation + close -->
+            <HBox alignment="CENTER_LEFT" spacing="16.0">
+                <Label text="&#8249;" onMouseClicked="#showPreviousMonth"
+                       styleClass="calendar-nav-button"/>
+                <Label fx:id="calendarTitleLabel" text="Agosto 2026"
+                       minWidth="260.0" alignment="CENTER"
+                       styleClass="calendar-title"/>
+                <Label text="&#8250;" onMouseClicked="#showNextMonth"
+                       styleClass="calendar-nav-button"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Label text="&#10005;"
+                       onMouseClicked="#closeCalendarScreen"
+                       styleClass="alarm-sheet-close"/>
+            </HBox>
+
+            <!-- Body: month grid (left) + selected-day events (right) -->
+            <HBox spacing="22.0" VBox.vgrow="ALWAYS">
+
+                <VBox spacing="6.0">
+                    <!-- Weekday header: L M X J V S D -->
+                    <HBox fx:id="calendarWeekdayRow" spacing="6.0">
+                        <Label text="L" minWidth="82.0" alignment="CENTER" styleClass="calendar-weekday"/>
+                        <Label text="M" minWidth="82.0" alignment="CENTER" styleClass="calendar-weekday"/>
+                        <Label text="X" minWidth="82.0" alignment="CENTER" styleClass="calendar-weekday"/>
+                        <Label text="J" minWidth="82.0" alignment="CENTER" styleClass="calendar-weekday"/>
+                        <Label text="V" minWidth="82.0" alignment="CENTER" styleClass="calendar-weekday"/>
+                        <Label text="S" minWidth="82.0" alignment="CENTER" styleClass="calendar-weekday"/>
+                        <Label text="D" minWidth="82.0" alignment="CENTER" styleClass="calendar-weekday"/>
+                    </HBox>
+                    <!-- Week rows built dynamically -->
+                    <VBox fx:id="calendarGrid" spacing="7.0"/>
+                </VBox>
+
+                <!-- Selected day agenda -->
+                <VBox spacing="10.0" HBox.hgrow="ALWAYS">
+                    <Label fx:id="calendarSelectedDateLabel" text=""
+                           wrapText="true"
+                           styleClass="calendar-selected-date"/>
+                    <ScrollPane fx:id="calendarEventScroll"
+                                fitToWidth="true"
+                                hbarPolicy="NEVER"
+                                vbarPolicy="AS_NEEDED"
+                                styleClass="alarm-list-scroll"
+                                VBox.vgrow="ALWAYS" HBox.hgrow="ALWAYS">
+                        <VBox fx:id="calendarEventList" spacing="10.0"/>
+                    </ScrollPane>
+                </VBox>
+            </HBox>
+        </VBox>
+    </AnchorPane>
+
+    <!-- Alpha Speech Bubble (Topmost transient alert; Alpha "says" remote messages) -->
+    <VBox fx:id="notificationBubbleWrap"
+          alignment="CENTER" spacing="0"
+          AnchorPane.bottomAnchor="24.0"
           AnchorPane.leftAnchor="48.0"
           AnchorPane.rightAnchor="48.0">
 
-        <Label text="🔔" style="-fx-font-size: 22px;"/>
-        <Label fx:id="notificationLabel"
-               text=""
-               styleClass="notification-text"
-               wrapText="true"
-               HBox.hgrow="ALWAYS"/>
+        <HBox fx:id="notificationBanner"
+              visible="false"
+              alignment="CENTER_LEFT" spacing="18.0"
+              maxWidth="820.0"
+              styleClass="notification-bubble">
 
-        <!-- Spacer -->
-        <HBox HBox.hgrow="ALWAYS"/>
+            <!-- Avatar: pulsing aurora glow behind a gradient ring with robot face -->
+            <StackPane fx:id="notificationAvatar"
+                       styleClass="notification-avatar"
+                       minWidth="62.0" minHeight="62.0">
+                <Region fx:id="notificationAvatarGlow"
+                        visible="false"
+                        styleClass="notification-avatar-glow"/>
+                <SVGPath content="M4 15q-1.25 0 -2.12 -0.88 t -0.88 -2.12 q 0 -1.25 0.88 -2.12 t 2.12 -0.88 v -2 q 0 -0.83 0.59 -1.41 T 6 5 h 3 q 0 -1.25 0.88 -2.12 t 2.12 -0.88 q 1.25 0 2.12 0.88 t 0.88 2.12 h 3 q 0.83 0 1.41 0.59 T 20 7 v 2 q 1.25 0 2.12 0.88 t 0.88 2.12 q 0 1.25 -0.88 2.12 t -2.12 0.88 v 4 q 0 0.83 -0.59 1.41 T 18 21 H 6 q -0.83 0 -1.41 -0.59 T 4 19 v -4 Z m 6.06 -2.44 Q 10.5 12.12 10.5 11.5 t -0.44 -1.06 Q 9.62 10 9 10 t -1.06 0.44 Q 7.5 10.88 7.5 11.5 t 0.44 1.06 Q 8.38 13 9 13 t 1.06 -0.44 Z m 6 0 Q 16.5 12.12 16.5 11.5 t -0.44 -1.06 Q 15.62 10 15 10 t -1.06 0.44 Q 13.5 10.88 13.5 11.5 t 0.44 1.06 Q 14.38 13 15 13 t 1.06 -0.44 Z M 9 17 h 6 q 0.43 0 0.71 -0.29 T 16 16 q 0 -0.43 -0.29 -0.71 T 15 15 H 9 q -0.43 0 -0.71 0.29 T 8 16 q 0 0.43 0.29 0.71 T 9 17 Z"
+                         fill="#ffffff" scaleX="1.7" scaleY="1.7"/>
+            </StackPane>
 
-        <!-- Touch Dismiss Button -->
-        <Label text="✕"
-               onMouseClicked="#dismissNotification"
-               styleClass="notification-close-btn"/>
-    </HBox>
+            <!-- Message content -->
+            <VBox alignment="CENTER_LEFT" spacing="3.0" maxWidth="660.0">
+                <Label text="ALPHA"
+                       styleClass="notification-author"/>
+                <Label fx:id="notificationLabel"
+                       text=""
+                       styleClass="notification-text"
+                       wrapText="true"/>
+            </VBox>
+
+            <!-- Spacer -->
+            <Region HBox.hgrow="ALWAYS"/>
+
+            <!-- Touch Dismiss Button -->
+            <Label text="&#10005;"
+                   onMouseClicked="#dismissNotification"
+                   styleClass="notification-close-btn"/>
+        </HBox>
+
+        <!-- Speech tail pointing down from the bubble -->
+        <SVGPath content="M0 0 L20 0 L10 9 Z"
+                 fill="rgba(16, 31, 56, 0.97)" scaleX="1.6" scaleY="1.6"/>
+    </VBox>
 
     <!-- Alarm Manager Sheet (Modal: list, add, toggle and delete alarms by touch) -->
     <AnchorPane fx:id="alarmManagerLayer"

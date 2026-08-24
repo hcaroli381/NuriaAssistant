@@ -19,6 +19,8 @@ public class VoiceAssistantService {
 
     private final HttpClient httpClient;
     private final String baseUrl;
+    // Immutable and reusable: built once instead of on every 1-second poll
+    private final HttpRequest stateRequest;
 
     public VoiceAssistantService(String baseUrl) {
         this.baseUrl = baseUrl != null && !baseUrl.isBlank()
@@ -26,6 +28,11 @@ public class VoiceAssistantService {
                 : "http://127.0.0.1:8090";
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(2))
+                .build();
+        this.stateRequest = HttpRequest.newBuilder()
+                .uri(URI.create(this.baseUrl + "/assistant/state"))
+                .timeout(Duration.ofSeconds(3))
+                .GET()
                 .build();
     }
 
@@ -36,13 +43,7 @@ public class VoiceAssistantService {
      *                  or an offline snapshot if the backend is unreachable.
      */
     public void fetchState(Consumer<VoiceAssistantSnapshot> onSuccess) {
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(baseUrl + "/assistant/state"))
-                .timeout(Duration.ofSeconds(3))
-                .GET()
-                .build();
-
-        httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+        httpClient.sendAsync(stateRequest, HttpResponse.BodyHandlers.ofString())
                 .thenApply(response -> {
                     if (response.statusCode() != 200) {
                         return VoiceAssistantSnapshot.offlineSnapshot();

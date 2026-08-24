@@ -134,10 +134,8 @@ public class TelegramService {
             return;
         }
 
-        // Format message for display on the screen
-        String formattedDisplay = (msg.senderName() != null && !msg.senderName().isBlank())
-                ? msg.senderName() + ": " + text
-                : text;
+        // Alpha presents every remote message as her own speech on screen
+        String formattedDisplay = text;
 
         if (onMessageReceived != null) {
             onMessageReceived.accept(formattedDisplay);

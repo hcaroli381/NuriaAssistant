@@ -2,15 +2,20 @@ package com.example.nuriaassistant;
 
 import com.example.nuriaassistant.config.ConfigLoader;
 import com.example.nuriaassistant.models.Alarm;
+import com.example.nuriaassistant.models.CalendarEvent;
 import com.example.nuriaassistant.models.SpotifyTrackData;
 import com.example.nuriaassistant.models.VoiceAssistantSnapshot;
 import com.example.nuriaassistant.services.AlarmService;
+import com.example.nuriaassistant.services.CalendarService;
 import com.example.nuriaassistant.services.NotificationServer;
 import com.example.nuriaassistant.services.TelegramService;
 import com.example.nuriaassistant.services.ThemeManager;
 import com.example.nuriaassistant.services.VoiceAssistantService;
+import com.example.nuriaassistant.services.VoiceBackendLauncher;
 import com.example.nuriaassistant.services.WeatherService;
+import com.example.nuriaassistant.spotify.SpotifyQrGenerator;
 import com.example.nuriaassistant.spotify.SpotifyService;
+import com.google.zxing.common.BitMatrix;
 import javafx.animation.Animation;
 import javafx.animation.FadeTransition;
 import javafx.animation.Interpolator;
@@ -23,11 +28,15 @@ import javafx.animation.SequentialTransition;
 import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.fxml.FXML;
+import javafx.scene.Node;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.Cursor;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.image.PixelFormat;
+import javafx.scene.image.PixelWriter;
+import javafx.scene.image.WritableImage;
 import javafx.scene.input.MouseEvent;
 import javafx.geometry.Pos;
 import javafx.scene.layout.AnchorPane;
@@ -43,16 +52,23 @@ import javafx.scene.shape.SVGPath;
 import javafx.util.Duration;
 
 import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Main Controller for the Alpha Assistant application.
@@ -94,6 +110,9 @@ public class AssistantController {
 
     @FXML
     private Label notificationLabel;
+
+    @FXML
+    private Region notificationAvatarGlow;
 
     // Spotify Full Screen UI
     @FXML
@@ -177,6 +196,35 @@ public class AssistantController {
     @FXML
     private Label nextAlarmLabel;
 
+    // Next-Event Hint UI
+    @FXML
+    private HBox nextEventRow;
+
+    @FXML
+    private Label nextEventLabel;
+
+    // Calendar Screen UI
+    @FXML
+    private AnchorPane calendarLayer;
+
+    @FXML
+    private VBox calendarCard;
+
+    @FXML
+    private Label calendarTitleLabel;
+
+    @FXML
+    private VBox calendarGrid;
+
+    @FXML
+    private Label calendarSelectedDateLabel;
+
+    @FXML
+    private VBox calendarEventList;
+
+    @FXML
+    private Label calendarBadgeLabel;
+
     // Alarm Manager Sheet UI
     @FXML
     private AnchorPane alarmManagerLayer;
@@ -236,17 +284,33 @@ public class AssistantController {
     @FXML
     private Label alarmRingTitleLabel;
 
+    // Spotify QR Auth Overlay UI
+    @FXML
+    private AnchorPane spotifyAuthLayer;
+
+    @FXML
+    private VBox spotifyAuthCard;
+
+    @FXML
+    private ImageView spotifyAuthQrView;
+
+    @FXML
+    private Label spotifyAuthStatusLabel;
+
     private WeatherService weatherService;
     private NotificationServer notificationServer;
     private TelegramService telegramService;
     private SpotifyService spotifyService;
     private VoiceAssistantService voiceService;
+    private VoiceBackendLauncher voiceBackendLauncher;
     private AlarmService alarmService;
+    private CalendarService calendarService;
 
     // UI State
     private boolean isCurrentlyShowingSpotify = false;
     private String currentCoverUrl = null;
     private Animation activeTransition = null;
+    private String lastTrackSignature = null;
 
     // Voice UI State
     private String voiceUiState = "OFFLINE";
@@ -254,17 +318,24 @@ public class AssistantController {
     private boolean voiceMuted = false;
     private long lastVoicePollAttemptMs = 0L;
     private long lastVoiceAutoStartMs = 0L;
+    private long lastVoiceSpawnAttemptMs = 0L;
     private Timeline orbBreathing = null;
     private Timeline thinkingDotsAnimation = null;
     private PauseTransition replyLingerTimer = null;
     private Timeline cardSlideIn = null;
     private FadeTransition cardFadeOut = null;
 
+    // Notification Bubble State
+    private Timeline notificationSlideIn = null;
+    private FadeTransition notificationFadeOut = null;
+    private Timeline avatarGlowPulse = null;
+
     // Alarm State
     private Alarm activeRingingAlarm = null;
     private MediaPlayer alarmPlayer = null;
     private Timeline alarmGlowPulse = null;
     private int lastAlarmHintMinute = -1;
+    private String cachedDateText = null;
 
     // Alarm Editor State (null id = creating a new alarm)
     private Alarm editingAlarm = null;
@@ -273,6 +344,16 @@ public class AssistantController {
     private boolean editorOnce = false;
     private final Set<DayOfWeek> editorDays = new LinkedHashSet<>();
     private final List<Label> dayChips = new ArrayList<>();
+
+    // Calendar Screen State
+    private List<CalendarEvent> calendarEvents = List.of();
+    private YearMonth displayedMonth = null;
+    private LocalDate selectedCalendarDate = null;
+    private final Map<LocalDate, VBox> calendarDayCells = new HashMap<>();
+    private static final DateTimeFormatter CALENDAR_MONTH_FORMAT =
+            DateTimeFormatter.ofPattern("MMMM yyyy", new Locale("es", "ES"));
+    private static final DateTimeFormatter CALENDAR_DAY_FORMAT =
+            DateTimeFormatter.ofPattern("EEEE d' de 'MMMM", new Locale("es", "ES"));
 
     // Background thread executor for non-blocking Spotify polling
     private final ExecutorService spotifyExecutor = Executors.newSingleThreadExecutor(r -> {
@@ -288,9 +369,31 @@ public class AssistantController {
         return t;
     });
 
+    // Single daemon ticker driving weather/Spotify/voice periodic work off the FX thread
+    private final ScheduledExecutorService backgroundTicker = Executors.newScheduledThreadPool(1, r -> {
+        Thread t = new Thread(r, "assistant-ticker");
+        t.setDaemon(true);
+        return t;
+    });
+
     @FXML
     public void initialize() {
         ConfigLoader configLoader = new ConfigLoader();
+
+        // Raster-cache the animated overlays once: transform/opacity animations
+        // then run on cached textures instead of re-rasterizing every pulse.
+        // Only nodes whose OWN transform/opacity animates are cached — parents
+        // of continuously-animating children (e.g. the intro logo scale-up)
+        // would invalidate their texture every frame.
+                enableNodeCache(voiceOrb);
+        enableNodeCache(voiceCard);
+        enableNodeCache(notificationBanner);
+        enableNodeCache(notificationAvatarGlow);
+        enableNodeCache(alarmGlowPane);
+        enableNodeCache(alarmManagerLayer);
+        enableNodeCache(spotifyAuthLayer);
+        enableNodeCache(calendarLayer);
+        enableNodeCache(spotifyFullScreenLayer);
 
         // 1. Initialize Clock and Date updates (1-second tick)
         updateTime();
@@ -303,6 +406,25 @@ public class AssistantController {
         buildDayChips();
         refreshNextAlarmHint();
 
+        // 1c. Initialize Calendar System (public iCloud .ics share link).
+        //     Cached payload renders instantly; network refresh follows.
+        String icsUrl = configLoader.getProperty("CALENDAR_ICS_URL");
+        if (icsUrl != null && !icsUrl.isBlank()) {
+            calendarService = new CalendarService(icsUrl);
+            calendarEvents = calendarService.loadCached();
+            refreshCalendarBadge();
+            calendarService.fetchAsync(
+                    events -> Platform.runLater(() -> {
+                        calendarEvents = events;
+                        refreshNextEventHint();
+                        refreshCalendarBadge();
+                        if (calendarLayer != null && calendarLayer.isVisible()) {
+                            rebuildCalendarGrid();
+                        }
+                    }),
+                    error -> { /* offline: keep showing cached data */ });
+        }
+
         // 2. Initialize Weather Service
         String apiKey = configLoader.getProperty("OPENWEATHER_API_KEY");
         String city = configLoader.getProperty("OPENWEATHER_CITY");
@@ -312,13 +434,10 @@ public class AssistantController {
             weatherCityLabel.setText(displayCity);
         }
 
-        if (apiKey != null && !apiKey.isEmpty()) {
+        boolean weatherConfigured = apiKey != null && !apiKey.isEmpty();
+        if (weatherConfigured) {
             weatherService = new WeatherService(apiKey, city != null ? city : "Granada,ES");
             fetchWeather();
-            // Refresh weather every 30 minutes
-            Timeline weatherTimer = new Timeline(new KeyFrame(Duration.minutes(30), event -> fetchWeather()));
-            weatherTimer.setCycleCount(Animation.INDEFINITE);
-            weatherTimer.play();
         } else {
             if (weatherTempLabel != null) {
                 weatherTempLabel.setText("--°C");
@@ -336,31 +455,23 @@ public class AssistantController {
             System.err.println("Failed to start notification server: " + e.getMessage());
         }
 
-        // 4. Initialize Spotify Service
+        // 4. Initialize Spotify Service (+ silent session restore / QR login)
         String clientId = configLoader.getProperty("SPOTIFY_CLIENT_ID");
         String clientSecret = configLoader.getProperty("SPOTIFY_CLIENT_SECRET");
         String redirectUri = configLoader.getProperty("SPOTIFY_REDIRECT_URI");
 
-        if (clientId != null && clientSecret != null && redirectUri != null) {
+        boolean spotifyConfigured = clientId != null && clientSecret != null && redirectUri != null;
+        if (spotifyConfigured) {
             spotifyService = new SpotifyService(clientId, clientSecret, redirectUri);
             System.out.println("Spotify service initialized.");
 
-            // Start embedded OAuth callback server on port 8888
+            // Embedded OAuth callback server on port 8888 (accepts phone callbacks too)
             spotifyService.startAuthCallbackServer(this::handleSpotifyCallback, 8888);
 
-            // Print authorization URI for easy setup
-            try {
-                String authUrl = spotifyService.getAuthorizationUri();
-                System.out.println("Spotify Auth URL: " + authUrl);
-            } catch (Exception e) {
-                System.err.println("Failed to generate Spotify Auth URL: " + e.getMessage());
-            }
+            restoreOrRequestSpotifySession();
 
-            // Start periodic polling for currently playing track (every 4 seconds)
-            pollCurrentlyPlaying();
-            Timeline spotifyTimer = new Timeline(new KeyFrame(Duration.seconds(4), event -> pollCurrentlyPlaying()));
-            spotifyTimer.setCycleCount(Animation.INDEFINITE);
-            spotifyTimer.play();
+            // Periodic polling for currently playing track (every 4 seconds)
+            backgroundTicker.scheduleWithFixedDelay(this::pollCurrentlyPlaying, 0, 4, TimeUnit.SECONDS);
         }
 
         // 5. Initialize Telegram Bot Service (Remote Messaging from outside local network)
@@ -372,14 +483,37 @@ public class AssistantController {
             telegramService.start();
         }
 
-        // 6. Initialize Voice Assistant Front-End (polls Python backend on port 8090)
-        voiceService = new VoiceAssistantService(configLoader.getProperty("VOICE_BACKEND_URL"));
+        // 6. Initialize Voice Assistant Front-End (polls Python backend on port 8090).
+        //    When the backend is not reachable and lives next to the app, it is
+        //    spawned automatically so a single jar run contains the whole system.
+        String backendUrl = configLoader.getProperty("VOICE_BACKEND_URL");
+        voiceService = new VoiceAssistantService(backendUrl);
+        voiceBackendLauncher = new VoiceBackendLauncher(
+                backendUrl,
+                configLoader.getProperty("VOICE_BACKEND_DIR"),
+                configLoader.getProperty("VOICE_PYTHON_BIN"));
         initVoiceAnimations();
         pollVoiceState();
-        Timeline voiceTimer = new Timeline(new KeyFrame(Duration.seconds(1), event -> pollVoiceState()));
-        voiceTimer.setCycleCount(Animation.INDEFINITE);
-        voiceTimer.play();
+        backgroundTicker.scheduleWithFixedDelay(this::pollVoiceState, 1, 1, TimeUnit.SECONDS);
 
+        // 7. Shared slow tickers (kept off the FX animation clock)
+        if (weatherConfigured) {
+            backgroundTicker.scheduleWithFixedDelay(this::fetchWeather, 30, 30, TimeUnit.MINUTES);
+        }
+        if (calendarService != null) {
+            backgroundTicker.scheduleWithFixedDelay(
+                    () -> calendarService.fetchAsync(
+                            events -> Platform.runLater(() -> {
+                                calendarEvents = events;
+                                refreshNextEventHint();
+                                refreshCalendarBadge();
+                                if (calendarLayer != null && calendarLayer.isVisible()) {
+                                    rebuildCalendarGrid();
+                                }
+                            }),
+                            error -> { /* offline: keep cached data */ }),
+                    15, 15, TimeUnit.MINUTES);
+        }
     }
 
     /**
@@ -392,14 +526,22 @@ public class AssistantController {
         if (timeLabel != null) {
             timeLabel.setText(ThemeManager.formatTime(now));
         }
+        // The date string only changes at midnight: skip the label write the
+        // other 86399 ticks of the day (text layout is expensive on the Pi).
         if (dateLabel != null) {
-            dateLabel.setText(ThemeManager.formatDate(now));
+            String date = ThemeManager.formatDate(now);
+            if (!date.equals(cachedDateText)) {
+                cachedDateText = date;
+                dateLabel.setText(date);
+            }
         }
 
         checkAlarms(now);
         if (now.getMinute() != lastAlarmHintMinute) {
             lastAlarmHintMinute = now.getMinute();
             refreshNextAlarmHint();
+            refreshNextEventHint();
+            refreshCalendarBadge();
         }
     }
 
@@ -427,11 +569,20 @@ public class AssistantController {
         boolean isPlaying = track != null && track.isPlaying() && !track.title().isBlank();
 
         if (isPlaying) {
-            populateTrackData(track);
-
             if (!isCurrentlyShowingSpotify) {
                 // Transition from paused to playing: play Spotify logo intro transition
                 showSpotifyWithTransition();
+            }
+
+            // Polling arrives every 4s with mostly identical data: only touch the
+            // scene graph (text layout + image swap) when something really changed.
+            String signature = track.title() + '\n' + track.artist() + '\n'
+                    + track.album() + '\n' + track.deviceName();
+            String coverUrl = track.coverUrl() == null ? "" : track.coverUrl();
+            boolean coverChanged = !coverUrl.equals(currentCoverUrl == null ? "" : currentCoverUrl);
+            if (coverChanged || !signature.equals(lastTrackSignature)) {
+                lastTrackSignature = signature;
+                populateTrackData(track);
             }
         } else {
             if (isCurrentlyShowingSpotify) {
@@ -471,12 +622,14 @@ public class AssistantController {
      */
     private void showSpotifyWithTransition() {
         isCurrentlyShowingSpotify = true;
+        lastTrackSignature = null;
 
-        // Spotify takes over the screen: hide all voice UI (the assistant
-        // itself keeps running and can still execute actions).
+        // Spotify takes over the screen: hide all voice UI and any open sheet
+        // (the assistant itself keeps running and can still execute actions).
         cancelReplyLinger();
         hideVoiceCard(true);
         voiceOverlayLayer.setVisible(false);
+        closeCalendarScreen(true);
 
         if (activeTransition != null) {
             activeTransition.stop();
@@ -535,6 +688,7 @@ public class AssistantController {
      */
     private void hideSpotifyMode() {
         isCurrentlyShowingSpotify = false;
+        lastTrackSignature = null;
 
         if (activeTransition != null) {
             activeTransition.stop();
@@ -584,38 +738,144 @@ public class AssistantController {
     }
 
     /**
-     * Displays a persistent notification message in the notification banner.
+     * Displays a remote message inside Alpha's speech bubble: the assistant
+     * "says" it with a slide-up + fade entrance and a softly pulsing avatar.
      * The message stays visible until touched on screen or cleared via Telegram /clear.
      *
-     * @param message Notification message text.
+     * @param message Notification message text (null/blank hides the bubble).
      */
     private void displayNotification(String message) {
         Platform.runLater(() -> {
             if (message == null || message.trim().isEmpty()) {
-                if (notificationBanner != null) notificationBanner.setVisible(false);
-                if (notificationLabel != null) notificationLabel.setText("");
+                hideNotificationBubble(true);
                 return;
             }
 
             if (notificationLabel != null) {
-                notificationLabel.setText(message);
+                notificationLabel.setText(message.trim());
             }
-            if (notificationBanner != null) {
+            if (notificationBanner == null) {
+                return;
+            }
+
+            boolean alreadyVisible = notificationBanner.isVisible();
+            if (notificationFadeOut != null) {
+                notificationFadeOut.stop();
+                notificationFadeOut = null;
+            }
+
+            if (!alreadyVisible) {
+                if (notificationSlideIn != null) {
+                    notificationSlideIn.stop();
+                }
+                notificationBanner.setTranslateY(52.0);
+                notificationBanner.setOpacity(0.0);
                 notificationBanner.setVisible(true);
+                startAvatarGlowPulse();
+
+                notificationSlideIn = new Timeline(new KeyFrame(Duration.millis(340),
+                        new KeyValue(notificationBanner.opacityProperty(), 1.0, Interpolator.EASE_OUT),
+                        new KeyValue(notificationBanner.translateYProperty(), 0.0, Interpolator.EASE_OUT)));
+                notificationSlideIn.setOnFinished(e -> {
+                    notificationSlideIn = null;
+                    // Drop the shadow-heavy entrance state; keep only transforms animated.
+                });
+                notificationSlideIn.play();
+            } else {
+                // New message replaces the old one with a gentle re-pop.
+                if (notificationSlideIn != null) {
+                    notificationSlideIn.stop();
+                }
+                notificationSlideIn = new Timeline(
+                        new KeyFrame(Duration.millis(90),
+                                new KeyValue(notificationBanner.scaleXProperty(), 0.97, Interpolator.EASE_BOTH),
+                                new KeyValue(notificationBanner.scaleYProperty(), 0.97, Interpolator.EASE_BOTH)),
+                        new KeyFrame(Duration.millis(200),
+                                new KeyValue(notificationBanner.scaleXProperty(), 1.0, Interpolator.EASE_OUT),
+                                new KeyValue(notificationBanner.scaleYProperty(), 1.0, Interpolator.EASE_OUT)));
+                notificationSlideIn.setOnFinished(e -> notificationSlideIn = null);
+                notificationSlideIn.play();
             }
         });
     }
 
     /**
-     * Dismisses the notification banner when tapped by the user on the touchscreen.
+     * Dismisses Alpha's speech bubble when tapped by the user on the touchscreen.
      */
     @FXML
     public void dismissNotification() {
-        if (notificationBanner != null) {
-            notificationBanner.setVisible(false);
+        hideNotificationBubble(false);
+    }
+
+    /**
+     * Hides the speech bubble, instantly or with a short fade-down.
+     */
+    private void hideNotificationBubble(boolean instant) {
+        stopAvatarGlowPulse();
+        if (notificationSlideIn != null) {
+            notificationSlideIn.stop();
+            notificationSlideIn = null;
         }
-        if (notificationLabel != null) {
-            notificationLabel.setText("");
+        if (notificationBanner == null || !notificationBanner.isVisible()) {
+            return;
+        }
+        if (instant) {
+            notificationBanner.setVisible(false);
+            notificationBanner.setOpacity(0.0);
+            notificationBanner.setTranslateY(0.0);
+            notificationBanner.setScaleX(1.0);
+            notificationBanner.setScaleY(1.0);
+            if (notificationLabel != null) {
+                notificationLabel.setText("");
+            }
+            return;
+        }
+        if (notificationFadeOut != null) {
+            notificationFadeOut.stop();
+        }
+        notificationFadeOut = new FadeTransition(Duration.millis(220), notificationBanner);
+        notificationFadeOut.setFromValue(notificationBanner.getOpacity());
+        notificationFadeOut.setToValue(0.0);
+        notificationFadeOut.setOnFinished(e -> {
+            notificationFadeOut = null;
+            notificationBanner.setVisible(false);
+            notificationBanner.setTranslateY(0.0);
+            notificationBanner.setScaleX(1.0);
+            notificationBanner.setScaleY(1.0);
+            if (notificationLabel != null) {
+                notificationLabel.setText("");
+            }
+        });
+        notificationFadeOut.play();
+    }
+
+    /**
+     * Soft aurora pulse behind the avatar while the bubble is on screen
+     * (single reusable timeline, opacity-only for Raspberry Pi performance).
+     */
+    private void startAvatarGlowPulse() {
+        if (notificationAvatarGlow == null) {
+            return;
+        }
+        if (avatarGlowPulse == null) {
+            avatarGlowPulse = new Timeline(
+                    new KeyFrame(Duration.ZERO,
+                            new KeyValue(notificationAvatarGlow.opacityProperty(), 0.35, Interpolator.EASE_BOTH)),
+                    new KeyFrame(Duration.millis(1100),
+                            new KeyValue(notificationAvatarGlow.opacityProperty(), 0.9, Interpolator.EASE_BOTH)));
+            avatarGlowPulse.setAutoReverse(true);
+            avatarGlowPulse.setCycleCount(Animation.INDEFINITE);
+        }
+        notificationAvatarGlow.setVisible(true);
+        avatarGlowPulse.playFrom(Duration.ZERO);
+    }
+
+    private void stopAvatarGlowPulse() {
+        if (avatarGlowPulse != null && avatarGlowPulse.getStatus() == Animation.Status.RUNNING) {
+            avatarGlowPulse.stop();
+        }
+        if (notificationAvatarGlow != null) {
+            notificationAvatarGlow.setVisible(false);
         }
     }
 
@@ -648,19 +908,431 @@ public class AssistantController {
      *
      * @param authorizationCode OAuth authorization code.
      */
-    @FXML
     public void handleSpotifyCallback(String authorizationCode) {
         if (spotifyService != null) {
             spotifyExecutor.submit(() -> {
                 boolean success = spotifyService.exchangeCodeForTokens(authorizationCode);
+                Platform.runLater(() -> {
+                    if (success) {
+                        System.out.println("Spotify successfully authorized.");
+                        onSpotifyConnected();
+                    } else {
+                        System.err.println("Spotify authorization failed.");
+                        if (spotifyAuthStatusLabel != null && spotifyAuthLayer.isVisible()) {
+                            spotifyAuthStatusLabel.setText("No se pudo conectar, escanea de nuevo");
+                            spotifyAuthStatusLabel.setStyle("-fx-text-fill: #ef4444;");
+                        }
+                        // Regenerate the QR so a fresh authorization URL is shown
+                        refreshSpotifyQr();
+                    }
+                });
                 if (success) {
-                    System.out.println("Spotify successfully authorized.");
                     pollCurrentlyPlaying();
-                } else {
-                    System.err.println("Spotify authorization failed.");
                 }
             });
         }
+    }
+
+    // =========================================================================
+    // SPOTIFY QR LOGIN (scan with the phone, authorize, done)
+    // =========================================================================
+
+    /**
+     * Tries a silent session restore from ~/.alpha/spotify-tokens.json.
+     * Falls back to the on-screen QR login overlay when no usable session exists.
+     */
+    private void restoreOrRequestSpotifySession() {
+        if (!spotifyService.restorePersistedSession()) {
+            System.out.println("Spotify: no stored session. Showing QR login.");
+            openSpotifyAuth();
+            return;
+        }
+        spotifyExecutor.submit(() -> {
+            boolean refreshed = spotifyService.refreshAccessToken();
+            Platform.runLater(() -> {
+                if (refreshed) {
+                    System.out.println("Spotify session restored from stored tokens.");
+                } else {
+                    System.out.println("Spotify stored session rejected. Showing QR login.");
+                    openSpotifyAuth();
+                }
+            });
+        });
+    }
+
+    /** Spotify icon button: opens the QR login sheet on demand. */
+    @FXML
+    public void openSpotifyAuth() {
+        if (spotifyService == null || spotifyAuthLayer == null || spotifyAuthLayer.isVisible()) {
+            return;
+        }
+        refreshSpotifyQr();
+        spotifyAuthLayer.setOpacity(0.0);
+        spotifyAuthLayer.setVisible(true);
+        FadeTransition fadeIn = new FadeTransition(Duration.millis(200), spotifyAuthLayer);
+        fadeIn.setFromValue(0.0);
+        fadeIn.setToValue(1.0);
+        fadeIn.play();
+    }
+
+    @FXML
+    public void closeSpotifyAuth() {
+        if (spotifyAuthLayer == null || !spotifyAuthLayer.isVisible()) {
+            return;
+        }
+        FadeTransition fadeOut = new FadeTransition(Duration.millis(180), spotifyAuthLayer);
+        fadeOut.setToValue(0.0);
+        fadeOut.setOnFinished(e -> spotifyAuthLayer.setVisible(false));
+        fadeOut.play();
+    }
+
+    /** Closes the sheet only when the backdrop itself is clicked, not its children. */
+    @FXML
+    public void closeSpotifyAuthOnOutsideClick(MouseEvent event) {
+        if (event.getTarget() == spotifyAuthLayer) {
+            closeSpotifyAuth();
+        }
+    }
+
+    /** Keeps clicks inside the card from bubbling to the backdrop handler. */
+    @FXML
+    public void swallowSpotifyAuthClick(MouseEvent event) {
+        event.consume();
+    }
+
+    /**
+     * Builds a fresh authorization URL and renders it as an on-screen QR code
+     * that any phone camera can scan to complete the Spotify login.
+     */
+    private void refreshSpotifyQr() {
+        if (spotifyService == null || spotifyAuthQrView == null) {
+            return;
+        }
+        try {
+            String authUrl = spotifyService.getAuthorizationUri();
+            System.out.println("Spotify Auth URL: " + authUrl);
+
+            BitMatrix matrix = SpotifyQrGenerator.generate(authUrl);
+            if (matrix == null) {
+                spotifyAuthStatusLabel.setText("No se pudo generar el QR");
+                return;
+            }
+            int size = Math.max(matrix.getWidth(), 1);
+            WritableImage qrImage = new WritableImage(size, size);
+            PixelWriter writer = qrImage.getPixelWriter();
+            int[] buffer = new int[size * size];
+            for (int y = 0; y < matrix.getHeight(); y++) {
+                for (int x = 0; x < matrix.getWidth(); x++) {
+                    buffer[y * size + x] = matrix.get(x, y) ? 0xFF111827 : 0xFFFFFFFF;
+                }
+            }
+            writer.setPixels(0, 0, size, size,
+                    PixelFormat.getIntArgbInstance(), buffer, 0, size);
+            spotifyAuthQrView.setImage(qrImage);
+
+            if (spotifyAuthStatusLabel != null) {
+                spotifyAuthStatusLabel.setText("Esperando conexi\u00f3n...");
+                spotifyAuthStatusLabel.setStyle(null);
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to generate Spotify Auth URL: " + e.getMessage());
+            if (spotifyAuthStatusLabel != null) {
+                spotifyAuthStatusLabel.setText("Error generando el enlace de acceso");
+            }
+        }
+    }
+
+    /**
+     * Called on the FX thread once tokens are stored: dismisses the QR sheet
+     * and confirms through Alpha's speech bubble.
+     */
+    private void onSpotifyConnected() {
+        if (spotifyAuthLayer != null && spotifyAuthLayer.isVisible()) {
+            closeSpotifyAuth();
+        }
+        displayNotification("\u2705 Spotify conectado");
+    }
+
+    /**
+     * Raster-caches a node so opacity/transform animations composite the cached
+     * texture instead of re-rendering gradients/effects each pulse.
+     */
+    private static void enableNodeCache(Node node) {
+        if (node != null) {
+            node.setCache(true);
+        }
+    }
+
+    // =========================================================================
+    // CALENDAR SCREEN (full-screen agenda: month grid + day event list)
+    // =========================================================================
+
+    /** Calendar icon button: opens the agenda on the current month. */
+    @FXML
+    public void openCalendarScreen() {
+        if (calendarLayer == null || calendarLayer.isVisible()) {
+            return;
+        }
+        LocalDate today = LocalDate.now();
+        displayedMonth = YearMonth.from(today);
+        selectCalendarDate(today);
+
+        calendarLayer.setOpacity(0.0);
+        calendarLayer.setVisible(true);
+        FadeTransition fadeIn = new FadeTransition(Duration.millis(200), calendarLayer);
+        fadeIn.setFromValue(0.0);
+        fadeIn.setToValue(1.0);
+        fadeIn.play();
+    }
+
+    @FXML
+    public void closeCalendarScreen() {
+        closeCalendarScreen(false);
+    }
+
+    private void closeCalendarScreen(boolean instant) {
+        if (calendarLayer == null || !calendarLayer.isVisible()) {
+            return;
+        }
+        if (instant) {
+            calendarLayer.setVisible(false);
+            calendarLayer.setOpacity(0.0);
+            return;
+        }
+        FadeTransition fadeOut = new FadeTransition(Duration.millis(180), calendarLayer);
+        fadeOut.setToValue(0.0);
+        fadeOut.setOnFinished(e -> calendarLayer.setVisible(false));
+        fadeOut.play();
+    }
+
+    /** Closes the screen only when the backdrop itself is clicked, not its children. */
+    @FXML
+    public void closeCalendarOnOutsideClick(MouseEvent event) {
+        if (event.getTarget() == calendarLayer) {
+            closeCalendarScreen();
+        }
+    }
+
+    /** Keeps clicks inside the card from bubbling to the backdrop handler. */
+    @FXML
+    public void swallowCalendarClick(MouseEvent event) {
+        event.consume();
+    }
+
+    @FXML
+    public void showPreviousMonth() {
+        navigateMonth(-1);
+    }
+
+    @FXML
+    public void showNextMonth() {
+        navigateMonth(1);
+    }
+
+    private void navigateMonth(int delta) {
+        displayedMonth = displayedMonth.plusMonths(delta);
+        rebuildCalendarGrid();
+    }
+
+    private void selectCalendarDate(LocalDate date) {
+        selectedCalendarDate = date;
+        rebuildCalendarGrid();
+    }
+
+    /**
+     * Rebuilds the 6x7 month grid (Monday-first). Cells are plain labels with
+     * pre-baked style classes: no effects, built once per navigation/refresh,
+     * selection toggles a single style class without rebuilding anything.
+     */
+    private void rebuildCalendarGrid() {
+        if (calendarGrid == null || displayedMonth == null) {
+            return;
+        }
+        String monthTitle = capitalize(displayedMonth.format(CALENDAR_MONTH_FORMAT));
+        calendarTitleLabel.setText(monthTitle);
+
+        calendarDayCells.clear();
+        calendarGrid.getChildren().clear();
+
+        LocalDate firstOfMonth = displayedMonth.atDay(1);
+        LocalDate gridStart = firstOfMonth.with(java.time.temporal.TemporalAdjusters
+                .previousOrSame(DayOfWeek.MONDAY));
+
+        for (int week = 0; week < 6; week++) {
+            HBox row = new HBox(6);
+            for (int day = 0; day < 7; day++) {
+                LocalDate cellDate = gridStart.plusDays(week * 7L + day);
+                row.getChildren().add(buildDayCell(cellDate,
+                        YearMonth.from(cellDate).equals(displayedMonth)));
+            }
+            calendarGrid.getChildren().add(row);
+        }
+        highlightSelectedCell(null);
+        rebuildDayAgenda();
+    }
+
+    private VBox buildDayCell(LocalDate date, boolean inDisplayedMonth) {
+        VBox cell = new VBox(3);
+        cell.setAlignment(javafx.geometry.Pos.TOP_CENTER);
+        cell.getStyleClass().add("cal-day");
+        cell.setUserData(date);
+
+        Label number = new Label(String.valueOf(date.getDayOfMonth()));
+        number.getStyleClass().add("cal-day-number");
+        cell.getChildren().add(number);
+
+        List<CalendarEvent> dayEvents = eventsOn(date);
+        if (!dayEvents.isEmpty()) {
+            HBox dots = new HBox(3);
+            dots.getStyleClass().add("cal-dots-row");
+            int shown = 0;
+            for (CalendarEvent event : dayEvents) {
+                if (shown >= 3) {
+                    break;
+                }
+                Label dot = new Label();
+                dot.getStyleClass().add("cal-dot");
+                // All-day events get a sky-blue dot, timed ones violet
+                dot.setStyle("-fx-background-color: "
+                        + (event.allDay() ? "#38bdf8;" : "#a855f7;"));
+                dots.getChildren().add(dot);
+                shown++;
+            }
+            cell.getChildren().add(dots);
+        }
+
+        if (!inDisplayedMonth) {
+            cell.getStyleClass().add("cal-day-other");
+        }
+        if (date.equals(LocalDate.now())) {
+            cell.getStyleClass().add("cal-day-today");
+        }
+
+        cell.setOnMouseClicked(e -> {
+            selectedCalendarDate = date;
+            highlightSelectedCell(cell);
+            rebuildDayAgenda();
+        });
+
+        calendarDayCells.put(date, cell);
+        if (date.equals(selectedCalendarDate)) {
+            cell.getStyleClass().add("cal-day-selected");
+        }
+        return cell;
+    }
+
+    private void highlightSelectedCell(VBox newlySelected) {
+        for (VBox cell : calendarDayCells.values()) {
+            cell.getStyleClass().remove("cal-day-selected");
+        }
+        if (newlySelected != null && !newlySelected.getStyleClass().contains("cal-day-selected")) {
+            newlySelected.getStyleClass().add("cal-day-selected");
+        }
+    }
+
+    private void rebuildDayAgenda() {
+        if (calendarEventList == null || selectedCalendarDate == null) {
+            return;
+        }
+        String dayTitle = capitalize(selectedCalendarDate.format(CALENDAR_DAY_FORMAT));
+        calendarSelectedDateLabel.setText(dayTitle);
+
+        calendarEventList.getChildren().clear();
+        List<CalendarEvent> dayEvents = eventsOn(selectedCalendarDate);
+        if (dayEvents.isEmpty()) {
+            Label empty = new Label("No hay eventos este d\u00eda");
+            empty.getStyleClass().add("cal-empty-hint");
+            empty.setWrapText(true);
+            calendarEventList.getChildren().add(empty);
+            return;
+        }
+        for (CalendarEvent event : dayEvents) {
+            VBox card = new VBox(2);
+            card.getStyleClass().add("cal-event-card");
+
+            Label time = new Label(event.displayTime());
+            time.getStyleClass().add("cal-event-time");
+            Label title = new Label(event.title().isBlank() ? "(sin t\u00edtulo)" : event.title());
+            title.getStyleClass().add("cal-event-title");
+            title.setWrapText(true);
+
+            card.getChildren().addAll(time, title);
+            calendarEventList.getChildren().add(card);
+        }
+    }
+
+    /**
+     * Violet badge over the calendar icon button: how many events start
+     * within the next 7 days (hidden when there are none).
+     */
+    private void refreshCalendarBadge() {
+        if (calendarBadgeLabel == null || calendarService == null) {
+            return;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime limit = now.plusDays(7);
+        int count = 0;
+        for (CalendarEvent event : calendarEvents) {
+            if (!event.start().isBefore(now) && event.start().isBefore(limit)) {
+                count++;
+            }
+        }
+        calendarBadgeLabel.setVisible(count > 0);
+        calendarBadgeLabel.setText(String.valueOf(count));
+    }
+
+    /** Pre-sorted lookup of events overlapping the given date (linear scan; lists are small). */
+    private List<CalendarEvent> eventsOn(LocalDate date) {
+        if (calendarEvents.isEmpty()) {
+            return List.of();
+        }
+        List<CalendarEvent> matches = new ArrayList<>(4);
+        for (CalendarEvent event : calendarEvents) {
+            if (event.overlapsDate(date)) {
+                matches.add(event);
+            }
+        }
+        return matches;
+    }
+
+    /**
+     * Subtle next-event hint under the weather row (same family as the
+     * next-alarm hint). Refreshes once per minute and on every feed refresh.
+     */
+    private void refreshNextEventHint() {
+        if (nextEventRow == null || nextEventLabel == null) {
+            return;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        CalendarEvent next = null;
+        for (CalendarEvent event : calendarEvents) {
+            if (event.start().isAfter(now)) {
+                next = event;
+                break;
+            }
+        }
+
+        String summary = null;
+        if (next != null) {
+            String when;
+            LocalDate startDate = next.startDate();
+            if (startDate.equals(now.toLocalDate())) {
+                when = "Hoy";
+            } else if (startDate.equals(now.toLocalDate().plusDays(1))) {
+                when = "Ma\u00f1ana";
+            } else {
+                when = startDate.getDayOfMonth() + "/" + startDate.getMonthValue();
+            }
+            String timePart = next.allDay() ? "" : " " + next.start().format(DateTimeFormatter.ofPattern("HH:mm"));
+            String title = next.title();
+            if (title.length() > 26) {
+                title = title.substring(0, 26) + "\u2026";
+            }
+            summary = title + " \u00b7 " + when + timePart;
+        }
+
+        nextEventRow.setVisible(summary != null);
+        nextEventLabel.setText(summary != null ? summary : "");
     }
 
     // =========================================================================
@@ -703,14 +1375,15 @@ public class AssistantController {
 
     /**
      * Polls the voice backend every second on a background thread.
-     * When the backend is unreachable, backs off to one attempt every 5 seconds.
+     * When the backend is unreachable — or the mic is muted and the UI is
+     * frozen anyway — backs off to one attempt every 5 seconds.
      */
     private void pollVoiceState() {
         if (voiceService == null) {
             return;
         }
         long now = System.currentTimeMillis();
-        if (!voiceBackendOnline && now - lastVoicePollAttemptMs < 5000) {
+        if ((!voiceBackendOnline || voiceMuted) && now - lastVoicePollAttemptMs < 5000) {
             return;
         }
         lastVoicePollAttemptMs = now;
@@ -744,6 +1417,7 @@ public class AssistantController {
             maybeAutoStartRuntime(snapshot);
         } else {
             voiceBackendOnline = false;
+            maybeSpawnVoiceBackend();
         }
 
         String target = deriveUiState(snapshot);
@@ -765,6 +1439,24 @@ public class AssistantController {
             System.out.println("Voice backend online but runtime stopped. Auto-starting...");
             voiceService.startRuntime();
         }
+    }
+
+    /**
+     * When the backend is unreachable, spawns the local Python service
+     * (throttled) so a plain `java -jar` run contains the whole assistant.
+     * The launcher itself gives up after a missing directory and retries only
+     * genuine start failures.
+     */
+    private void maybeSpawnVoiceBackend() {
+        if (voiceBackendLauncher == null || voiceBackendLauncher.isAlive()) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        if (now - lastVoiceSpawnAttemptMs < 20000) {
+            return;
+        }
+        lastVoiceSpawnAttemptMs = now;
+        voiceExecutor.submit(voiceBackendLauncher::ensureRunning);
     }
 
     /**
@@ -1103,10 +1795,11 @@ public class AssistantController {
         String title = alarm.label();
         alarmRingTitleLabel.setText(title == null || title.isBlank() ? "Alarma" : title);
 
-        // The manager sheet must never stay above the ringing overlay
+        // No sheet may stay above the ringing overlay
         if (alarmManagerLayer.isVisible()) {
             closeAlarmManager();
         }
+        closeCalendarScreen(true);
 
         ensureAlarmSound();
         if (alarmPlayer != null) {
@@ -1540,12 +2233,25 @@ public class AssistantController {
         if (notificationServer != null) {
             notificationServer.stop();
         }
+        if (voiceBackendLauncher != null) {
+            voiceBackendLauncher.stop();
+        }
+        backgroundTicker.shutdownNow();
         spotifyExecutor.shutdownNow();
         voiceExecutor.shutdownNow();
         stopOrbBreathing();
         stopThinkingDots();
         cancelReplyLinger();
         stopGlowPulse();
+        stopAvatarGlowPulse();
+        if (notificationSlideIn != null) {
+            notificationSlideIn.stop();
+            notificationSlideIn = null;
+        }
+        if (notificationFadeOut != null) {
+            notificationFadeOut.stop();
+            notificationFadeOut = null;
+        }
         if (alarmPlayer != null) {
             try {
                 alarmPlayer.stop();

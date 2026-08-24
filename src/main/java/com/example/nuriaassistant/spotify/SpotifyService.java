@@ -45,14 +45,42 @@ public class SpotifyService {
     }
 
     private final SpotifyApi spotifyApi;
+    private final SpotifyTokenStore tokenStore;
     private HttpServer authCallbackServer;
 
     public SpotifyService(String clientId, String clientSecret, String redirectUri) {
+        this(clientId, clientSecret, redirectUri, new SpotifyTokenStore());
+    }
+
+    public SpotifyService(String clientId, String clientSecret, String redirectUri, SpotifyTokenStore tokenStore) {
         this.spotifyApi = new SpotifyApi.Builder()
                 .setClientId(clientId)
                 .setClientSecret(clientSecret)
                 .setRedirectUri(URI.create(redirectUri))
                 .build();
+        this.tokenStore = tokenStore != null ? tokenStore : new SpotifyTokenStore();
+    }
+
+    /**
+     * True when an access token is currently loaded in the API client.
+     */
+    public boolean isAuthenticated() {
+        String token = spotifyApi.getAccessToken();
+        return token != null && !token.isEmpty();
+    }
+
+    /**
+     * Restores a previously persisted session from ~/.alpha/spotify-tokens.json.
+     * Returns true when a refresh token exists (silent refresh possible);
+     * false means the user must complete the QR login again.
+     */
+    public synchronized boolean restorePersistedSession() {
+        if (!tokenStore.load()) {
+            return false;
+        }
+        spotifyApi.setAccessToken(tokenStore.accessToken());
+        spotifyApi.setRefreshToken(tokenStore.refreshToken());
+        return true;
     }
 
     /**
@@ -66,7 +94,7 @@ public class SpotifyService {
     public String getAuthorizationUri() throws IOException, SpotifyWebApiException, ParseException {
         AuthorizationCodeUriRequest authRequest = spotifyApi.authorizationCodeUri()
                 .scope("user-read-currently-playing,user-read-playback-state")
-                .show_dialog(true)
+                .show_dialog(false)
                 .build();
 
         URI uri = authRequest.execute();
@@ -157,6 +185,8 @@ public class SpotifyService {
 
             spotifyApi.setAccessToken(credentials.getAccessToken());
             spotifyApi.setRefreshToken(credentials.getRefreshToken());
+            tokenStore.save(credentials.getAccessToken(), credentials.getRefreshToken(),
+                    credentials.getExpiresIn());
 
             System.out.println("Spotify OAuth completed. Access token expires in " + credentials.getExpiresIn() + " seconds.");
             return true;
@@ -168,7 +198,9 @@ public class SpotifyService {
 
     /**
      * Refreshes the access token using the stored refresh token.
-     * Spotify access tokens expire after 1 hour.
+     * Spotify access tokens expire after 1 hour. Successful refreshes are
+     * persisted so the session survives reboots; a rejected refresh token
+     * clears the store and forces a new QR login.
      *
      * @return True if token was refreshed successfully, false otherwise.
      */
@@ -187,10 +219,22 @@ public class SpotifyService {
             if (credentials.getRefreshToken() != null) {
                 spotifyApi.setRefreshToken(credentials.getRefreshToken());
             }
+            tokenStore.save(credentials.getAccessToken(), credentials.getRefreshToken(),
+                    credentials.getExpiresIn());
             System.out.println("Spotify access token refreshed successfully.");
             return true;
         } catch (IOException | SpotifyWebApiException | ParseException e) {
-            System.err.println("Error refreshing Spotify access token: " + e.getMessage());
+            String message = e.getMessage() != null ? e.getMessage() : "";
+            if (message.contains("400") || message.contains("invalid_grant")) {
+                // Refresh token revoked/expired: wipe stale credentials so the
+                // QR overlay comes back on the next startup.
+                System.err.println("Spotify refresh token rejected; clearing stored session.");
+                tokenStore.clear();
+                spotifyApi.setAccessToken(null);
+                spotifyApi.setRefreshToken(null);
+            } else {
+                System.err.println("Error refreshing Spotify access token: " + message);
+            }
             return false;
         }
     }
