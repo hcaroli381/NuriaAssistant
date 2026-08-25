@@ -527,6 +527,57 @@
 }
 
 /* --------------------------------------------------------------------------
+   Photo Frame (Full-screen slideshow)
+   -------------------------------------------------------------------------- */
+.photo-frame-button {
+    -fx-background-color: rgba(56, 189, 248, 0.14);
+    -fx-border-color: rgba(56, 189, 248, 0.55);
+    -fx-background-radius: 34px;
+    -fx-border-radius: 34px;
+    -fx-border-width: 1.5px;
+    -fx-padding: 18px;
+    -fx-cursor: hand;
+}
+
+.photo-frame-button:hover {
+    -fx-background-color: rgba(56, 189, 248, 0.28);
+}
+
+.photo-frame-layer {
+    -fx-background-color: rgba(1, 4, 12, 0.97);
+}
+
+.photo-nav-zone {
+    -fx-background-color: transparent;
+}
+
+.photo-counter {
+    -fx-text-fill: rgba(226, 232, 240, 0.85);
+    -fx-font-size: 15px;
+    -fx-font-weight: 600;
+    -fx-background-color: rgba(13, 27, 52, 0.72);
+    -fx-border-color: rgba(148, 163, 184, 0.25);
+    -fx-border-width: 1px;
+    -fx-background-radius: 16px;
+    -fx-border-radius: 16px;
+    -fx-padding: 6px 18px;
+}
+
+.photo-close-btn {
+    -fx-font-size: 20px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #cbd5e1;
+    -fx-padding: 10px 20px;
+    -fx-background-color: rgba(13, 27, 52, 0.72);
+    -fx-background-radius: 16px;
+    -fx-cursor: hand;
+}
+
+.photo-close-btn:hover {
+    -fx-background-color: rgba(239, 68, 68, 0.35);
+}
+
+/* --------------------------------------------------------------------------
    Alarms: Manager Sheet (Modal Card)
    -------------------------------------------------------------------------- */
 .alarm-sheet-backdrop {

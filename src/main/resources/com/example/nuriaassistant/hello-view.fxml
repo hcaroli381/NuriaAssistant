@@ -218,6 +218,15 @@
                 </StackPane>
             </HBox>
 
+            <!-- Photo Frame Entry (picture icon, opens the ambient slideshow) -->
+            <HBox alignment="CENTER"
+                  fx:id="photoFrameButton"
+                  styleClass="photo-frame-button"
+                  onMouseClicked="#openPhotoFrame">
+                <SVGPath content="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"
+                         fill="#38bdf8" scaleX="1.35" scaleY="1.35"/>
+            </HBox>
+
             <!-- Ambient Mic Orb / Mute Button (Collapsed state) -->
             <HBox fx:id="voiceOrb" alignment="CENTER" spacing="8.0"
                   styleClass="voice-orb"
@@ -395,6 +404,53 @@
                 </VBox>
             </HBox>
         </VBox>
+    </AnchorPane>
+
+    <!-- Photo Frame (Full-screen slideshow: crossfades through ~/.alpha/photos) -->
+    <AnchorPane fx:id="photoLayer"
+                visible="false" opacity="0.0"
+                styleClass="photo-frame-layer"
+                AnchorPane.topAnchor="0.0" AnchorPane.bottomAnchor="0.0"
+                AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0">
+
+        <!-- Stacked ImageViews for jank-free opacity-only crossfades -->
+        <StackPane AnchorPane.topAnchor="0.0" AnchorPane.bottomAnchor="0.0"
+                   AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0">
+            <ImageView fx:id="photoViewA"
+                       fitWidth="1024.0" fitHeight="600.0"
+                       preserveRatio="true" smooth="true"/>
+            <ImageView fx:id="photoViewB"
+                       fitWidth="1024.0" fitHeight="600.0"
+                       preserveRatio="true" smooth="true"/>
+        </StackPane>
+
+        <!-- Touch navigation: left half = previous, right half = next -->
+        <Region fx:id="photoPrevZone"
+                onMouseClicked="#showPreviousPhoto"
+                styleClass="photo-nav-zone"
+                AnchorPane.topAnchor="0.0" AnchorPane.bottomAnchor="0.0"
+                AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="512.0"/>
+        <Region fx:id="photoNextZone"
+                onMouseClicked="#showNextPhoto"
+                styleClass="photo-nav-zone"
+                AnchorPane.topAnchor="0.0" AnchorPane.bottomAnchor="0.0"
+                AnchorPane.leftAnchor="512.0" AnchorPane.rightAnchor="90.0"/>
+
+        <!-- Bottom status chip: position in the library -->
+        <HBox alignment="CENTER"
+              AnchorPane.bottomAnchor="18.0"
+              AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0">
+            <Label fx:id="photoCounterLabel"
+                   text=""
+                   styleClass="photo-counter"/>
+        </HBox>
+
+        <!-- Close button (above the nav zones) -->
+        <Label text="&#10005;"
+               onMouseClicked="#closePhotoFrame"
+               styleClass="photo-close-btn"
+               AnchorPane.topAnchor="22.0"
+               AnchorPane.rightAnchor="26.0"/>
     </AnchorPane>
 
     <!-- Alpha Speech Bubble (Topmost transient alert; Alpha "says" remote messages) -->

@@ -41,14 +41,19 @@ The system operates as an "always-on" smart assistant (similar to an Echo Show) 
    - **Self-contained jar:** when the backend is unreachable and a `voice-backend/main.py` exists locally (`VOICE_BACKEND_DIR`, `./voice-backend`, `~/voice-backend` or `~/.alpha/voice-backend`), `VoiceBackendLauncher` spawns uvicorn as a child process so one `java -jar` run contains the whole assistant; the child is destroyed on shutdown.
    - Fully hidden while Spotify full-screen mode is active (assistant keeps running, nothing renders).
    - Performance-first for Pi 3: change-deduplicated state machine, animations created once and reused, transform/opacity only, 5s poll backoff when the backend is unreachable or muted.
-10. **iCloud Calendar (`CalendarService` + full-screen agenda):**
-    - Source: public read-only `.ics` share link from icloud.com (`CALENDAR_ICS_URL`; empty/missing = feature silently off). No OAuth, no Apple credentials on the Pi. Paste the `webcal://` link exactly as iCloud gives it — `CalendarService` normalizes it to `https://` automatically.
+10. **iCloud Calendar (`CalendarService` + full-screen agenda):**    - Source: public read-only `.ics` share link from icloud.com (`CALENDAR_ICS_URL`; empty/missing = feature silently off). No OAuth, no Apple credentials on the Pi. Paste the `webcal://` link exactly as iCloud gives it — `CalendarService` normalizes it to `https://` automatically.
     - Zero-dependency ICS parsing (`CalendarIcsParser`): VEVENT SUMMARY/DTSTART/DTEND, all-day (`VALUE=DATE`), multi-day spans, basic RRULEs (`FREQ=DAILY|WEEKLY`, `INTERVAL`, `BYDAY`, `UNTIL`, `COUNT`); exotic rules degrade to first occurrence. TZID times are read as Pi-local wall clock; explicit UTC is converted.
     - Fetch every 15 min on the shared daemon ticker; raw payload cached atomically at `~/.alpha/calendar.ics` so reboots render instantly even offline.
     - **Full-screen calendar screen** (calendar icon button next to the alarm/Spotify buttons in the top-right row): Monday-first month grid with event dots (sky = all-day, violet = timed), today outlined, tap a day → its agenda card list on the right; big ‹ › month navigation; auto-closes instantly if music starts or an alarm rings.
     - The calendar icon carries a violet count badge: events starting within the next 7 days (refreshed once per minute and on every feed refresh).
     - Subtle next-event hint under the weather row ("Cita · Hoy 18:00", "Mañana 10:00") refreshed once per minute.
     - Privacy: anyone holding the share link can read the calendar — she should share a dedicated calendar, never her main one.
+11. **Photo Frame (`PhotoFrameService` + full-screen slideshow):**
+    - Send any photo (or image document) to the Telegram bot → it is stored at `~/.alpha/photos/` and displayed full-screen immediately; Alpha confirms with a speech bubble ("📸 Foto añadida al marco").
+    - Library is capped at 50 photos (oldest evicted, protects the SD card); plain timestamped filenames, no index JSON — directory scan yields chronological order.
+    - Full-screen frame opens via the sky-blue photo icon button (top-right row) or Telegram `/foto`; advances every 15 s with a slow crossfade.
+    - Touch navigation: left half = previous photo, right half = next, ✕ closes. Auto-closes instantly if music starts or an alarm rings (same rules as the calendar).
+    - Pi-3 performance: two stacked ImageViews crossfade via opacity only; images decode off-FX-thread (`backgroundLoading`) downscaled to 1024×600 (~2.4 MB per bitmap); the next slide is preloaded during display; at most two decoded photos live in RAM; replaced bitmaps are nulled immediately.
 
 ## Remote Messaging System (Telegram & HTTP API)
 
@@ -151,6 +156,7 @@ The Pi has no browser or keyboard, so authorization happens on her phone:
 - `src/main/java/com/example/nuriaassistant/models/CalendarEvent.java`: Single calendar occurrence (title, start, end, all-day).
 - `src/main/java/com/example/nuriaassistant/models/Alarm.java`: Alarm model (time, repeat days, snooze/fire state, due-window logic).
 - `src/main/java/com/example/nuriaassistant/services/AlarmService.java`: Alarm persistence (`~/.alpha/alarms.json`), due-checks and next-alarm summary.
+- `src/main/java/com/example/nuriaassistant/services/PhotoFrameService.java`: Photo-frame library at `~/.alpha/photos/` (timestamped files, 50-photo cap, atomic writes).
 - `src/main/resources/com/example/nuriaassistant/sounds/alarm.wav`: Looping ring chime.
 - `deploy/`: systemd units (`nuria-voice.service`, `nuria-assistant.service`) + `install.sh` for boot-on-power kiosk deployment.
 

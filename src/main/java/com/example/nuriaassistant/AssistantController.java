@@ -8,6 +8,7 @@ import com.example.nuriaassistant.models.VoiceAssistantSnapshot;
 import com.example.nuriaassistant.services.AlarmService;
 import com.example.nuriaassistant.services.CalendarService;
 import com.example.nuriaassistant.services.NotificationServer;
+import com.example.nuriaassistant.services.PhotoFrameService;
 import com.example.nuriaassistant.services.TelegramService;
 import com.example.nuriaassistant.services.ThemeManager;
 import com.example.nuriaassistant.services.VoiceAssistantService;
@@ -65,6 +66,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.nio.file.Path;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -225,6 +227,22 @@ public class AssistantController {
     @FXML
     private Label calendarBadgeLabel;
 
+    // Photo Frame UI
+    @FXML
+    private HBox photoFrameButton;
+
+    @FXML
+    private AnchorPane photoLayer;
+
+    @FXML
+    private ImageView photoViewA;
+
+    @FXML
+    private ImageView photoViewB;
+
+    @FXML
+    private Label photoCounterLabel;
+
     // Alarm Manager Sheet UI
     @FXML
     private AnchorPane alarmManagerLayer;
@@ -355,6 +373,16 @@ public class AssistantController {
     private static final DateTimeFormatter CALENDAR_DAY_FORMAT =
             DateTimeFormatter.ofPattern("EEEE d' de 'MMMM", new Locale("es", "ES"));
 
+    // Photo Frame State
+    private PhotoFrameService photoStore;
+    private List<Path> photoLibrary = List.of();
+    private int currentPhotoIndex = -1;
+    private boolean photoFrontIsA = true;
+    private Image preloadedPhoto = null;
+    private Path preloadedPhotoPath = null;
+    private PauseTransition photoSlideTimer = null;
+    private FadeTransition photoCrossFade = null;
+
     // Background thread executor for non-blocking Spotify polling
     private final ExecutorService spotifyExecutor = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "spotify-poll-thread");
@@ -425,6 +453,11 @@ public class AssistantController {
                     error -> { /* offline: keep showing cached data */ });
         }
 
+        // 1d. Initialize Photo Frame store (persistent library at ~/.alpha/photos)
+        photoStore = new PhotoFrameService();
+        photoLibrary = photoStore.listPhotos();
+        enableNodeCache(photoLayer);
+
         // 2. Initialize Weather Service
         String apiKey = configLoader.getProperty("OPENWEATHER_API_KEY");
         String city = configLoader.getProperty("OPENWEATHER_CITY");
@@ -480,6 +513,12 @@ public class AssistantController {
 
         if (telegramToken != null && !telegramToken.isBlank()) {
             telegramService = new TelegramService(telegramToken, telegramChatId, this::displayNotification);
+            telegramService.setPhotoHandler(this::handleIncomingTelegramPhoto);
+            telegramService.setCommandHandler(command -> {
+                if ("foto".equals(command)) {
+                    Platform.runLater(this::openPhotoFrame);
+                }
+            });
             telegramService.start();
         }
 
@@ -630,6 +669,7 @@ public class AssistantController {
         hideVoiceCard(true);
         voiceOverlayLayer.setVisible(false);
         closeCalendarScreen(true);
+        closePhotoFrame(true);
 
         if (activeTransition != null) {
             activeTransition.stop();
@@ -1336,6 +1376,252 @@ public class AssistantController {
     }
 
     // =========================================================================
+    // PHOTO FRAME (full-screen slideshow over ~/.alpha/photos)
+    // =========================================================================
+
+    /**
+     * Telegram photo hook (runs on the polling thread): persists the bytes and
+     * reveals the new photo full-screen with an Alpha confirmation bubble.
+     */
+    private boolean handleIncomingTelegramPhoto(TelegramService.TelegramPhoto photo, byte[] data) {
+        try {
+            Path saved = photoStore.save(data);
+            Platform.runLater(() -> {
+                photoLibrary = photoStore.listPhotos();
+                displayNotification("\ud83d\udcf8 Foto a\u00f1adida al marco");
+                int index = photoLibrary.indexOf(saved);
+                showPhotoAt(index >= 0 ? index : photoLibrary.size() - 1);
+            });
+            System.out.println("PhotoFrame: stored Telegram photo (" + data.length + " bytes)");
+            return true;
+        } catch (Exception e) {
+            System.err.println("PhotoFrame: failed to store Telegram photo: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /** Photo icon button: opens the ambient slideshow on the most recent photo. */
+    @FXML
+    public void openPhotoFrame() {
+        if (photoLayer == null || photoLayer.isVisible()) {
+            return;
+        }
+        photoLibrary = photoStore.listPhotos();
+        if (photoLibrary.isEmpty()) {
+            displayNotification("\ud83d\uddbc\ufe0f El marco est\u00e1 vac\u00edo: m\u00e1ndame una foto por Telegram");
+            return;
+        }
+        currentPhotoIndex = -1;
+        presentPhotoLayer();
+        displayPhoto(photoLibrary.size() - 1);
+    }
+
+    @FXML
+    public void closePhotoFrame() {
+        closePhotoFrame(false);
+    }
+
+    private void closePhotoFrame(boolean instant) {
+        if (photoLayer == null || !photoLayer.isVisible()) {
+            return;
+        }
+        if (photoSlideTimer != null) {
+            photoSlideTimer.stop();
+        }
+        if (photoCrossFade != null) {
+            photoCrossFade.stop();
+            photoCrossFade = null;
+        }
+        Runnable finish = () -> {
+            photoLayer.setVisible(false);
+            photoLayer.setOpacity(0.0);
+            photoViewA.setImage(null);
+            photoViewB.setImage(null);
+            photoViewA.setOpacity(1.0);
+            photoViewB.setOpacity(0.0);
+            photoFrontIsA = true;
+            currentPhotoIndex = -1;
+            preloadedPhoto = null;
+            preloadedPhotoPath = null;
+            // Spotify owns the overlay lifecycle while it is playing.
+            if (!isCurrentlyShowingSpotify) {
+                voiceOverlayLayer.setVisible(true);
+            }
+        };
+        if (instant) {
+            finish.run();
+            return;
+        }
+        FadeTransition fadeOut = new FadeTransition(Duration.millis(220), photoLayer);
+        fadeOut.setToValue(0.0);
+        fadeOut.setOnFinished(e -> finish.run());
+        fadeOut.play();
+    }
+
+    /** Reveals the frame over everything except notifications/alarms. */
+    private void presentPhotoLayer() {
+        closeCalendarScreen(true);
+        voiceOverlayLayer.setVisible(false);
+        photoLayer.setOpacity(0.0);
+        photoLayer.setVisible(true);
+        FadeTransition fadeIn = new FadeTransition(Duration.millis(250), photoLayer);
+        fadeIn.setFromValue(0.0);
+        fadeIn.setToValue(1.0);
+        fadeIn.play();
+    }
+
+    /**
+     * Crossfades to the photo at the given index (wrapped). Identical indices
+     * only restart the slide timer so duplicate callbacks never re-decode.
+     */
+    private void showPhotoAt(int index) {
+        if (photoLayer == null || photoLibrary.isEmpty()) {
+            return;
+        }
+        int target = Math.floorMod(index, photoLibrary.size());
+        if (!photoLayer.isVisible()) {
+            currentPhotoIndex = -1;
+            presentPhotoLayer();
+        }
+        if (target == currentPhotoIndex) {
+            scheduleNextSlide();
+            return;
+        }
+        displayPhoto(target);
+    }
+
+    @FXML
+    public void showPreviousPhoto() {
+        navigatePhotos(-1);
+    }
+
+    @FXML
+    public void showNextPhoto() {
+        navigatePhotos(1);
+    }
+
+    private void navigatePhotos(int delta) {
+        if (!photoLayer.isVisible() || photoLibrary.isEmpty()) {
+            return;
+        }
+        int base = currentPhotoIndex < 0 ? 0 : currentPhotoIndex;
+        displayPhoto(Math.floorMod(base + delta, photoLibrary.size()));
+        scheduleNextSlide();
+    }
+
+    /**
+     * Advances to the given library slot, skipping corrupt files (bounded by
+     * the library size). Uses two stacked ImageViews so transitions are pure
+     * opacity fades; the replaced bitmap is released as soon as it is covered.
+     */
+    private void displayPhoto(int startIndex) {
+        ImageView front = photoFrontIsA ? photoViewA : photoViewB;
+        ImageView back = photoFrontIsA ? photoViewB : photoViewA;
+
+        // An interrupted fade leaves two populated views: reset the hidden one.
+        if (photoCrossFade != null) {
+            photoCrossFade.stop();
+            photoCrossFade = null;
+            front.setOpacity(1.0);
+        }
+        back.setImage(null);
+        back.setOpacity(0.0);
+
+        Image image = null;
+        int index = startIndex;
+        for (int attempts = photoLibrary.size(); attempts > 0; attempts--) {
+            currentPhotoIndex = index;
+            image = takePreloaded(photoLibrary.get(index));
+            if (!image.isError()) {
+                break;
+            }
+            System.err.println("PhotoFrame: unreadable image skipped: " + photoLibrary.get(index));
+            image = null;
+            index = Math.floorMod(index + 1, photoLibrary.size());
+        }
+        if (image == null) {
+            closePhotoFrame(true);
+            displayNotification("\u26a0\ufe0f No hay fotos legibles en el marco");
+            return;
+        }
+
+        back.setImage(image);
+        photoFrontIsA = !photoFrontIsA;
+        updatePhotoCounter();
+
+        if (front.getImage() == null) {
+            preloadNextPhoto();
+            scheduleNextSlide();
+            return; // very first paint: nothing to fade from
+        }
+
+        photoCrossFade = new FadeTransition(Duration.millis(900), back);
+        photoCrossFade.setFromValue(0.0);
+        photoCrossFade.setToValue(1.0);
+        photoCrossFade.setOnFinished(e -> {
+            front.setImage(null); // release the replaced bitmap (Pi RAM)
+            front.setOpacity(0.0);
+            photoCrossFade = null;
+            preloadNextPhoto();
+        });
+        photoCrossFade.play();
+        scheduleNextSlide();
+    }
+
+    /**
+     * One-shot 15s pause between slides; recreated never, restarted always,
+     * so periodic work stays off the FX animation clock between fires.
+     */
+    private void scheduleNextSlide() {
+        if (photoSlideTimer == null) {
+            photoSlideTimer = new PauseTransition(Duration.seconds(15));
+            photoSlideTimer.setOnFinished(e -> {
+                if (photoLayer.isVisible() && photoLibrary.size() > 1) {
+                    displayPhoto((currentPhotoIndex + 1) % photoLibrary.size());
+                }
+            });
+        }
+        photoSlideTimer.playFrom(Duration.ZERO);
+    }
+
+    /**
+     * Decodes the next photo ahead of time so crossfades are instant even on
+     * the Pi: backgroundLoading keeps the decode off the FX thread and the
+     * downscale to screen size caps each bitmap at ~2.4 MB.
+     */
+    private void preloadNextPhoto() {
+        if (photoLibrary.isEmpty() || photoLibrary.size() < 2) {
+            return;
+        }
+        Path nextPath = photoLibrary.get((currentPhotoIndex + 1) % photoLibrary.size());
+        if (nextPath.equals(preloadedPhotoPath)) {
+            return;
+        }
+        preloadedPhotoPath = nextPath;
+        preloadedPhoto = createPhotoImage(nextPath);
+    }
+
+    private Image takePreloaded(Path path) {
+        if (preloadedPhoto != null && path.equals(preloadedPhotoPath)) {
+            Image image = preloadedPhoto;
+            preloadedPhoto = null;
+            preloadedPhotoPath = null;
+            return image;
+        }
+        return createPhotoImage(path);
+    }
+
+    private static Image createPhotoImage(Path path) {
+        return new Image(path.toUri().toString(), 1024, 600, true, true, true);
+    }
+
+    private void updatePhotoCounter() {
+        if (photoCounterLabel != null) {
+            photoCounterLabel.setText((currentPhotoIndex + 1) + " / " + photoLibrary.size());
+        }
+    }
+
+    // =========================================================================
     // VOICE ASSISTANT FRONT-END (Python backend on port 8090)
     // =========================================================================
 
@@ -1800,6 +2086,7 @@ public class AssistantController {
             closeAlarmManager();
         }
         closeCalendarScreen(true);
+        closePhotoFrame(true);
 
         ensureAlarmSound();
         if (alarmPlayer != null) {
@@ -2251,6 +2538,14 @@ public class AssistantController {
         if (notificationFadeOut != null) {
             notificationFadeOut.stop();
             notificationFadeOut = null;
+        }
+        if (photoSlideTimer != null) {
+            photoSlideTimer.stop();
+            photoSlideTimer = null;
+        }
+        if (photoCrossFade != null) {
+            photoCrossFade.stop();
+            photoCrossFade = null;
         }
         if (alarmPlayer != null) {
             try {
