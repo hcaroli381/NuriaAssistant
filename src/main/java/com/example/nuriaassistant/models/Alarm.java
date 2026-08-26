@@ -3,7 +3,6 @@ package com.example.nuriaassistant.models;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Set;
@@ -149,10 +148,13 @@ public class Alarm {
         if (lastFiredDate != null && lastFiredDate.equals(now.toLocalDate())) {
             return false;
         }
-        // Fire window [target, target + 30s) so a lagging tick never skips the ring
-        LocalTime start = LocalTime.of(hour, minute);
-        LocalTime nowTime = now.toLocalTime();
-        return !nowTime.isBefore(start) && nowTime.isBefore(start.plusSeconds(30))
+        // Fire window [target, target + 30s) so a lagging tick never skips the ring.
+        // Evaluated with integer seconds-since-midnight (no LocalTime allocation
+        // per tick) — identical results since alarms are configured in whole minutes.
+        int startSec = hour * 3600 + minute * 60;
+        int endSec = startSec + 30;
+        int nowSec = now.getHour() * 3600 + now.getMinute() * 60 + now.getSecond();
+        return nowSec >= startSec && nowSec < endSec
                 && firesOn(now.getDayOfWeek());
     }
 

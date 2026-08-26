@@ -337,6 +337,7 @@ public class AssistantController {
     private long lastVoicePollAttemptMs = 0L;
     private long lastVoiceAutoStartMs = 0L;
     private long lastVoiceSpawnAttemptMs = 0L;
+    private double lastVoiceOrbOpacity = -1.0;
     private Timeline orbBreathing = null;
     private Timeline thinkingDotsAnimation = null;
     private PauseTransition replyLingerTimer = null;
@@ -1851,7 +1852,14 @@ public class AssistantController {
         switch (voiceUiState) {
             case "IDLE" -> {
                 double score = Math.min(1.0, snapshot.wakeWordScore() / 0.6);
-                voiceOrb.setOpacity(0.78 + 0.22 * score);
+                double opacity = 0.78 + 0.22 * score;
+                // Value-deduplicated: the poll arrives every second with a mostly
+                // stable score, and an unchanged opacity write still marks the
+                // cached orb dirty and forces a composite pass on the Pi.
+                if (opacity != lastVoiceOrbOpacity) {
+                    lastVoiceOrbOpacity = opacity;
+                    voiceOrb.setOpacity(opacity);
+                }
             }
             case "PROCESSING" -> {
                 String transcript = snapshot.lastTranscript();
@@ -1881,6 +1889,9 @@ public class AssistantController {
         voiceOrb.setStyle("-fx-background-color: rgba(" + rgb + ", 0.16);"
                 + " -fx-border-color: rgba(" + rgb + ", 0.55);");
         voiceOrb.setOpacity(orbOpacity);
+        // Reset the IDLE-optimised opacity cache so the next dynamic poll write
+        // re-applies (this method forcibly replaces the orb opacity otherwise).
+        lastVoiceOrbOpacity = -1.0;
     }
 
     /**
