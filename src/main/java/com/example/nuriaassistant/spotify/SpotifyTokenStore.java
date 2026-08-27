@@ -1,4 +1,5 @@
 package com.example.nuriaassistant.spotify;
+import com.example.nuriaassistant.util.Log;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -73,7 +74,7 @@ public class SpotifyTokenStore {
             refreshToken = extractString(json, "refreshToken");
             expiresAtEpochMs = extractLong(json, "expiresAtEpochMs");
         } catch (Exception e) {
-            System.err.println("SpotifyTokenStore: failed to load tokens: " + e.getMessage());
+            Log.error("SpotifyTokens", "SpotifyTokenStore: failed to load tokens: " + e.getMessage());
             return false;
         }
         return hasRefreshToken();
@@ -87,7 +88,7 @@ public class SpotifyTokenStore {
         try {
             Files.deleteIfExists(storageFile);
         } catch (IOException e) {
-            System.err.println("SpotifyTokenStore: failed to clear tokens: " + e.getMessage());
+            Log.error("SpotifyTokens", "SpotifyTokenStore: failed to clear tokens: " + e.getMessage());
         }
     }
 
@@ -105,7 +106,7 @@ public class SpotifyTokenStore {
                 Files.move(tmp, storageFile, StandardCopyOption.REPLACE_EXISTING);
             }
         } catch (IOException e) {
-            System.err.println("SpotifyTokenStore: failed to save tokens: " + e.getMessage());
+            Log.error("SpotifyTokens", "SpotifyTokenStore: failed to save tokens: " + e.getMessage());
         }
     }
 

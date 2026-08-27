@@ -1,4 +1,5 @@
 package com.example.nuriaassistant.services;
+import com.example.nuriaassistant.util.Log;
 
 import java.net.URI;
 import java.net.URLEncoder;
@@ -86,7 +87,7 @@ public class TelegramService {
      */
     public void start() {
         if (botToken == null || botToken.isBlank()) {
-            System.out.println("TelegramService: No TELEGRAM_BOT_TOKEN provided. Service inactive.");
+            Log.info("Telegram", "TelegramService: No TELEGRAM_BOT_TOKEN provided. Service inactive.");
             return;
         }
 
@@ -94,7 +95,7 @@ public class TelegramService {
         pollingThread = new Thread(this::pollUpdatesLoop, "telegram-bot-polling");
         pollingThread.setDaemon(true);
         pollingThread.start();
-        System.out.println("TelegramService: Started polling for messages on Telegram.");
+        Log.info("Telegram", "TelegramService: Started polling for messages on Telegram.");
     }
 
     /**
@@ -105,7 +106,7 @@ public class TelegramService {
         if (pollingThread != null) {
             pollingThread.interrupt();
         }
-        System.out.println("TelegramService: Stopped.");
+        Log.info("Telegram", "TelegramService: Stopped.");
     }
 
     private void pollUpdatesLoop() {
@@ -132,7 +133,7 @@ public class TelegramService {
 
                         // Check authorization if configured
                         if (allowedChatId != null && !allowedChatId.equals(String.valueOf(msg.chatId()))) {
-                            System.out.println("TelegramService: Ignored message from unauthorized Chat ID: " + msg.chatId());
+                            Log.info("Telegram", "TelegramService: Ignored message from unauthorized Chat ID: " + msg.chatId());
                             continue;
                         }
 
@@ -146,21 +147,21 @@ public class TelegramService {
                         }
 
                         if (allowedChatId != null && !allowedChatId.equals(String.valueOf(photo.chatId()))) {
-                            System.out.println("TelegramService: Ignored photo from unauthorized Chat ID: " + photo.chatId());
+                            Log.info("Telegram", "TelegramService: Ignored photo from unauthorized Chat ID: " + photo.chatId());
                             continue;
                         }
 
                         handleIncomingPhoto(photo);
                     }
                 } else {
-                    System.err.println("TelegramService: API returned status " + response.statusCode());
+                    Log.error("Telegram", "TelegramService: API returned status " + response.statusCode());
                     Thread.sleep(3000);
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 break;
             } catch (Exception e) {
-                System.err.println("TelegramService polling error: " + e.getMessage());
+                Log.error("Telegram", "TelegramService polling error: " + e.getMessage());
                 try {
                     Thread.sleep(5000);
                 } catch (InterruptedException ie) {
@@ -221,7 +222,7 @@ public class TelegramService {
         try {
             long fileSize = resolveFileSize(photo.fileId());
             if (fileSize > MAX_PHOTO_BYTES) {
-                System.out.println("TelegramService: photo too large (" + fileSize + " bytes), refused.");
+                Log.info("Telegram", "TelegramService: photo too large (" + fileSize + " bytes), refused.");
                 sendReply(photo.chatId(), "❌ La foto es demasiado grande para el marco");
                 return;
             }
@@ -239,7 +240,7 @@ public class TelegramService {
                 sendReply(photo.chatId(), "❌ No se pudo guardar la foto");
             }
         } catch (Exception e) {
-            System.err.println("TelegramService: failed to process photo: " + e.getMessage());
+            Log.error("Telegram", "TelegramService: failed to process photo: " + e.getMessage());
             sendReply(photo.chatId(), "❌ No pude descargar la foto");
         }
     }
@@ -318,7 +319,7 @@ public class TelegramService {
 
             httpClient.sendAsync(request, HttpResponse.BodyHandlers.discarding());
         } catch (Exception e) {
-            System.err.println("TelegramService: Failed to send reply: " + e.getMessage());
+            Log.error("Telegram", "TelegramService: Failed to send reply: " + e.getMessage());
         }
     }
 

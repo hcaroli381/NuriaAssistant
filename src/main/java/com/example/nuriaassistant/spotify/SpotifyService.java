@@ -1,4 +1,5 @@
 package com.example.nuriaassistant.spotify;
+import com.example.nuriaassistant.util.Log;
 
 import com.example.nuriaassistant.models.SpotifyTrackData;
 import com.sun.net.httpserver.HttpServer;
@@ -153,9 +154,9 @@ public class SpotifyService {
             });
             authCallbackServer.setExecutor(null);
             authCallbackServer.start();
-            System.out.println("Spotify OAuth callback server started on port " + port);
+            Log.info("Spotify", "Spotify OAuth callback server started on port " + port);
         } catch (IOException e) {
-            System.err.println("Failed to start Spotify OAuth callback server on port " + port + ": " + e.getMessage());
+            Log.error("Spotify", "Failed to start Spotify OAuth callback server on port " + port + ": " + e.getMessage());
         }
     }
 
@@ -166,7 +167,7 @@ public class SpotifyService {
         if (authCallbackServer != null) {
             authCallbackServer.stop(0);
             authCallbackServer = null;
-            System.out.println("Spotify OAuth callback server stopped.");
+            Log.info("Spotify", "Spotify OAuth callback server stopped.");
         }
     }
 
@@ -188,10 +189,10 @@ public class SpotifyService {
             tokenStore.save(credentials.getAccessToken(), credentials.getRefreshToken(),
                     credentials.getExpiresIn());
 
-            System.out.println("Spotify OAuth completed. Access token expires in " + credentials.getExpiresIn() + " seconds.");
+            Log.info("Spotify", "Spotify OAuth completed. Access token expires in " + credentials.getExpiresIn() + " seconds.");
             return true;
         } catch (IOException | SpotifyWebApiException | ParseException e) {
-            System.err.println("Error exchanging Spotify authorization code: " + e.getMessage());
+            Log.error("Spotify", "Error exchanging Spotify authorization code: " + e.getMessage());
             return false;
         }
     }
@@ -206,7 +207,7 @@ public class SpotifyService {
      */
     public boolean refreshAccessToken() {
         if (spotifyApi.getRefreshToken() == null || spotifyApi.getRefreshToken().isEmpty()) {
-            System.err.println("No refresh token available. User re-authentication required.");
+            Log.error("Spotify", "No refresh token available. User re-authentication required.");
             return false;
         }
         try {
@@ -221,19 +222,19 @@ public class SpotifyService {
             }
             tokenStore.save(credentials.getAccessToken(), credentials.getRefreshToken(),
                     credentials.getExpiresIn());
-            System.out.println("Spotify access token refreshed successfully.");
+            Log.info("Spotify", "Spotify access token refreshed successfully.");
             return true;
         } catch (IOException | SpotifyWebApiException | ParseException e) {
             String message = e.getMessage() != null ? e.getMessage() : "";
             if (message.contains("400") || message.contains("invalid_grant")) {
                 // Refresh token revoked/expired: wipe stale credentials so the
                 // QR overlay comes back on the next startup.
-                System.err.println("Spotify refresh token rejected; clearing stored session.");
+                Log.error("Spotify", "Spotify refresh token rejected; clearing stored session.");
                 tokenStore.clear();
                 spotifyApi.setAccessToken(null);
                 spotifyApi.setRefreshToken(null);
             } else {
-                System.err.println("Error refreshing Spotify access token: " + message);
+                Log.error("Spotify", "Error refreshing Spotify access token: " + message);
             }
             return false;
         }
@@ -259,15 +260,15 @@ public class SpotifyService {
             return request.execute();
         } catch (SpotifyWebApiException e) {
             if (e.getMessage() != null && e.getMessage().contains("401")) {
-                System.out.println("Spotify token expired. Refreshing...");
+                Log.info("Spotify", "Spotify token expired. Refreshing...");
                 if (refreshAccessToken()) {
                     return getPlaybackContext();
                 }
             }
-            System.err.println("Spotify API error: " + e.getMessage());
+            Log.error("Spotify", "Spotify API error: " + e.getMessage());
             return null;
         } catch (IOException | ParseException e) {
-            System.err.println("Error fetching Spotify playback context: " + e.getMessage());
+            Log.error("Spotify", "Error fetching Spotify playback context: " + e.getMessage());
             return null;
         }
     }
@@ -289,15 +290,15 @@ public class SpotifyService {
             return request.execute();
         } catch (SpotifyWebApiException e) {
             if (e.getMessage() != null && e.getMessage().contains("401")) {
-                System.out.println("Spotify token expired. Refreshing...");
+                Log.info("Spotify", "Spotify token expired. Refreshing...");
                 if (refreshAccessToken()) {
                     return getCurrentlyPlaying();
                 }
             }
-            System.err.println("Spotify API error: " + e.getMessage());
+            Log.error("Spotify", "Spotify API error: " + e.getMessage());
             return null;
         } catch (IOException | ParseException e) {
-            System.err.println("Error fetching currently playing track: " + e.getMessage());
+            Log.error("Spotify", "Error fetching currently playing track: " + e.getMessage());
             return null;
         }
     }

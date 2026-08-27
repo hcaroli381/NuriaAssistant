@@ -1,4 +1,5 @@
 package com.example.nuriaassistant.config;
+import com.example.nuriaassistant.util.Log;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -15,13 +16,13 @@ public class ConfigLoader {
         String path = "config.properties";
         try (InputStream input = getClass().getClassLoader().getResourceAsStream(path)) {
             if (input == null) {
-                System.out.println("ConfigLoader: Unable to find " + path + " in classpath");
+                Log.info("Config", "ConfigLoader: Unable to find " + path + " in classpath");
                 return;
             }
             properties.load(input);
-            System.out.println("ConfigLoader: Successfully loaded " + path);
+            Log.info("Config", "ConfigLoader: Successfully loaded " + path);
         } catch (IOException ex) {
-            System.err.println("ConfigLoader: Error loading " + path + ": " + ex.getMessage());
+            Log.error("Config", "ConfigLoader: Error loading " + path + ": " + ex.getMessage());
         }
     }
 
@@ -51,7 +52,7 @@ public class ConfigLoader {
             return value.trim();
         }
 
-        System.out.println("ConfigLoader: Warning - property '" + key + "' is null or empty");
+        Log.info("Config", "ConfigLoader: Warning - property '" + key + "' is null or empty");
         return null;
     }
 }

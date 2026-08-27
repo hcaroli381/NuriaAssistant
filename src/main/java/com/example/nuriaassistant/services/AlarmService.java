@@ -1,4 +1,5 @@
 package com.example.nuriaassistant.services;
+import com.example.nuriaassistant.util.Log;
 
 import com.example.nuriaassistant.models.Alarm;
 
@@ -168,7 +169,7 @@ public class AlarmService {
             String json = Files.readString(storageFile, StandardCharsets.UTF_8);
             parseAlarms(json, alarms);
         } catch (Exception e) {
-            System.err.println("AlarmService: failed to load alarms: " + e.getMessage());
+            Log.error("Alarm", "AlarmService: failed to load alarms: " + e.getMessage());
         }
     }
 
@@ -186,7 +187,7 @@ public class AlarmService {
                 Files.move(tmp, storageFile, StandardCopyOption.REPLACE_EXISTING);
             }
         } catch (IOException e) {
-            System.err.println("AlarmService: failed to save alarms: " + e.getMessage());
+            Log.error("Alarm", "AlarmService: failed to save alarms: " + e.getMessage());
         }
     }
 

@@ -16,6 +16,10 @@ import com.example.nuriaassistant.services.VoiceBackendLauncher;
 import com.example.nuriaassistant.services.WeatherService;
 import com.example.nuriaassistant.spotify.SpotifyQrGenerator;
 import com.example.nuriaassistant.spotify.SpotifyService;
+import com.example.nuriaassistant.ui.NightDimmingController;
+import com.example.nuriaassistant.ui.NotificationBubbleUi;
+import com.example.nuriaassistant.ui.WeatherUi;
+import com.example.nuriaassistant.util.Log;
 import com.google.zxing.common.BitMatrix;
 import javafx.animation.Animation;
 import javafx.animation.FadeTransition;
@@ -348,10 +352,9 @@ public class AssistantController {
     private Timeline cardSlideIn = null;
     private FadeTransition cardFadeOut = null;
 
-    // Notification Bubble State
-    private Timeline notificationSlideIn = null;
-    private FadeTransition notificationFadeOut = null;
-    private Timeline avatarGlowPulse = null;
+    // Extracted UI controllers (see ui/ package): night dimming + speech bubble
+    private NightDimmingController nightDimming;
+    private NotificationBubbleUi notificationBubbleUi;
 
     // Alarm State
     private Alarm activeRingingAlarm = null;
@@ -359,14 +362,6 @@ public class AssistantController {
     private Timeline alarmGlowPulse = null;
     private int lastAlarmHintMinute = -1;
     private String cachedDateText = null;
-
-    // Night Dimming State (screen saver: dim after idle time during night hours)
-    private long lastInteractionMillis = System.currentTimeMillis();
-    private boolean screenDimmed = false;
-    private FadeTransition dimFade = null;
-    private int dimIdleMinutes = 10;
-    private int dimStartHour = 22;
-    private int dimEndHour = 8;
 
     // Per-minute hint caches: text layout is the most expensive operation on the
     // Pi, so the next-alarm / next-event / calendar-badge labels are only
@@ -510,15 +505,16 @@ public class AssistantController {
         try {
             notificationServer.start();
         } catch (Exception e) {
-            System.err.println("Failed to start notification server: " + e.getMessage());
+            Log.error("Controller", "Failed to start notification server: " + e.getMessage());
         }
 
-        // 3b. Night dimming: config + interaction tracking. Any touch counts as
-        //     activity; the screen dims only after idle time during night hours.
-        configureNightDimming(configLoader);
-        rootPane.addEventFilter(MouseEvent.MOUSE_PRESSED, e -> touchActivity());
-        rootPane.addEventFilter(MouseEvent.MOUSE_DRAGGED, e -> touchActivity());
-        rootPane.addEventFilter(MouseEvent.MOUSE_MOVED, e -> touchActivity());
+        // 3b. Night dimming + speech bubble: extracted UI controllers own their
+        //     overlays; the controller just feeds them clock ticks and touches.
+        nightDimming = new NightDimmingController(dimLayer, configLoader);
+        notificationBubbleUi = new NotificationBubbleUi(notificationBanner, notificationLabel, notificationAvatarGlow);
+        rootPane.addEventFilter(MouseEvent.MOUSE_PRESSED, e -> nightDimming.touchActivity());
+        rootPane.addEventFilter(MouseEvent.MOUSE_DRAGGED, e -> nightDimming.touchActivity());
+        rootPane.addEventFilter(MouseEvent.MOUSE_MOVED, e -> nightDimming.touchActivity());
 
         // 4. Initialize Spotify Service (+ silent session restore / QR login)
         String clientId = configLoader.getProperty("SPOTIFY_CLIENT_ID");
@@ -528,7 +524,7 @@ public class AssistantController {
         boolean spotifyConfigured = clientId != null && clientSecret != null && redirectUri != null;
         if (spotifyConfigured) {
             spotifyService = new SpotifyService(clientId, clientSecret, redirectUri);
-            System.out.println("Spotify service initialized.");
+            Log.info("Controller", "Spotify service initialized.");
 
             // Embedded OAuth callback server on port 8888 (accepts phone callbacks too)
             spotifyService.startAuthCallbackServer(this::handleSpotifyCallback, 8888);
@@ -608,7 +604,7 @@ public class AssistantController {
         }
 
         checkAlarms(now);
-        checkDimming(now);
+        nightDimming.checkDimming(now);
         if (now.getMinute() != lastAlarmHintMinute) {
             lastAlarmHintMinute = now.getMinute();
             refreshNextAlarmHint();
@@ -617,92 +613,6 @@ public class AssistantController {
         }
     }
 
-    // =========================================================================
-    // NIGHT DIMMING (screen saver)
-    // =========================================================================
-
-    private void configureNightDimming(ConfigLoader configLoader) {
-        String idle = configLoader.getProperty("DIM_IDLE_MINUTES");
-        if (idle != null) {
-            try {
-                dimIdleMinutes = Math.max(1, Integer.parseInt(idle.trim()));
-            } catch (NumberFormatException ignored) {
-            }
-        }
-        String start = configLoader.getProperty("DIM_START_HOUR");
-        if (start != null) {
-            try {
-                dimStartHour = Math.floorMod(Integer.parseInt(start.trim()), 24);
-            } catch (NumberFormatException ignored) {
-            }
-        }
-        String end = configLoader.getProperty("DIM_END_HOUR");
-        if (end != null) {
-            try {
-                dimEndHour = Math.floorMod(Integer.parseInt(end.trim()), 24);
-            } catch (NumberFormatException ignored) {
-            }
-        }
-    }
-
-    /** Runs every second from the clock tick: dim / wake based on night hours + idle time. */
-    private void checkDimming(LocalDateTime now) {
-        boolean night = isNightHour(now.getHour());
-        boolean idleLong = System.currentTimeMillis() - lastInteractionMillis >= dimIdleMinutes * 60_000L;
-        if (screenDimmed) {
-            if (!night || !idleLong) {
-                wakeScreen();
-            }
-        } else if (night && idleLong) {
-            dimScreen();
-        }
-    }
-
-    /** True when the given hour falls inside the dim window (supports crossing midnight). */
-    private boolean isNightHour(int hour) {
-        if (dimStartHour <= dimEndHour) {
-            return hour >= dimStartHour && hour < dimEndHour;
-        }
-        return hour >= dimStartHour || hour < dimEndHour;
-    }
-
-    private void dimScreen() {
-        if (screenDimmed || dimLayer == null) {
-            return;
-        }
-        screenDimmed = true;
-        if (dimFade != null) {
-            dimFade.stop();
-        }
-        dimLayer.setVisible(true);
-        dimFade = new FadeTransition(Duration.millis(900), dimLayer);
-        dimFade.setFromValue(0.0);
-        dimFade.setToValue(1.0);
-        dimFade.play();
-    }
-
-    /** Any touch on the screen: marks activity and lifts the dim when present. */
-    private void touchActivity() {
-        lastInteractionMillis = System.currentTimeMillis();
-        if (screenDimmed) {
-            wakeScreen();
-        }
-    }
-
-    private void wakeScreen() {
-        if (!screenDimmed || dimLayer == null) {
-            return;
-        }
-        screenDimmed = false;
-        if (dimFade != null) {
-            dimFade.stop();
-        }
-        dimFade = new FadeTransition(Duration.millis(500), dimLayer);
-        dimFade.setFromValue(dimLayer.getOpacity());
-        dimFade.setToValue(0.0);
-        dimFade.setOnFinished(e -> dimLayer.setVisible(false));
-        dimFade.play();
-    }
 
     /**
      * Polls Spotify for current playback state on a background thread.
@@ -891,10 +801,10 @@ public class AssistantController {
                         if (weatherTempLabel != null) weatherTempLabel.setText("--°C");
                         if (weatherDescLabel != null) weatherDescLabel.setText("Data unavailable");
                     } else {
-                        String icon = getIconForWeather(data.description());
+                        String icon = WeatherUi.iconFor(data.description());
                         if (weatherIconLabel != null) weatherIconLabel.setText(icon);
                         if (weatherTempLabel != null) weatherTempLabel.setText(String.format("%.1f°C", data.temperature()));
-                        if (weatherDescLabel != null) weatherDescLabel.setText(capitalize(data.description()));
+                        if (weatherDescLabel != null) weatherDescLabel.setText(WeatherUi.capitalize(data.description()));
                     }
                 },
                 error -> {
@@ -914,57 +824,8 @@ public class AssistantController {
     private void displayNotification(String message) {
         Platform.runLater(() -> {
             // A remote message should always be seen: lift the night dim first.
-            wakeScreen();
-            if (message == null || message.trim().isEmpty()) {
-                hideNotificationBubble(true);
-                return;
-            }
-
-            if (notificationLabel != null) {
-                notificationLabel.setText(message.trim());
-            }
-            if (notificationBanner == null) {
-                return;
-            }
-
-            boolean alreadyVisible = notificationBanner.isVisible();
-            if (notificationFadeOut != null) {
-                notificationFadeOut.stop();
-                notificationFadeOut = null;
-            }
-
-            if (!alreadyVisible) {
-                if (notificationSlideIn != null) {
-                    notificationSlideIn.stop();
-                }
-                notificationBanner.setTranslateY(52.0);
-                notificationBanner.setOpacity(0.0);
-                notificationBanner.setVisible(true);
-                startAvatarGlowPulse();
-
-                notificationSlideIn = new Timeline(new KeyFrame(Duration.millis(340),
-                        new KeyValue(notificationBanner.opacityProperty(), 1.0, Interpolator.EASE_OUT),
-                        new KeyValue(notificationBanner.translateYProperty(), 0.0, Interpolator.EASE_OUT)));
-                notificationSlideIn.setOnFinished(e -> {
-                    notificationSlideIn = null;
-                    // Drop the shadow-heavy entrance state; keep only transforms animated.
-                });
-                notificationSlideIn.play();
-            } else {
-                // New message replaces the old one with a gentle re-pop.
-                if (notificationSlideIn != null) {
-                    notificationSlideIn.stop();
-                }
-                notificationSlideIn = new Timeline(
-                        new KeyFrame(Duration.millis(90),
-                                new KeyValue(notificationBanner.scaleXProperty(), 0.97, Interpolator.EASE_BOTH),
-                                new KeyValue(notificationBanner.scaleYProperty(), 0.97, Interpolator.EASE_BOTH)),
-                        new KeyFrame(Duration.millis(200),
-                                new KeyValue(notificationBanner.scaleXProperty(), 1.0, Interpolator.EASE_OUT),
-                                new KeyValue(notificationBanner.scaleYProperty(), 1.0, Interpolator.EASE_OUT)));
-                notificationSlideIn.setOnFinished(e -> notificationSlideIn = null);
-                notificationSlideIn.play();
-            }
+            nightDimming.wake();
+            notificationBubbleUi.show(message);
         });
     }
 
@@ -973,103 +834,7 @@ public class AssistantController {
      */
     @FXML
     public void dismissNotification() {
-        hideNotificationBubble(false);
-    }
-
-    /**
-     * Hides the speech bubble, instantly or with a short fade-down.
-     */
-    private void hideNotificationBubble(boolean instant) {
-        stopAvatarGlowPulse();
-        if (notificationSlideIn != null) {
-            notificationSlideIn.stop();
-            notificationSlideIn = null;
-        }
-        if (notificationBanner == null || !notificationBanner.isVisible()) {
-            return;
-        }
-        if (instant) {
-            notificationBanner.setVisible(false);
-            notificationBanner.setOpacity(0.0);
-            notificationBanner.setTranslateY(0.0);
-            notificationBanner.setScaleX(1.0);
-            notificationBanner.setScaleY(1.0);
-            if (notificationLabel != null) {
-                notificationLabel.setText("");
-            }
-            return;
-        }
-        if (notificationFadeOut != null) {
-            notificationFadeOut.stop();
-        }
-        notificationFadeOut = new FadeTransition(Duration.millis(220), notificationBanner);
-        notificationFadeOut.setFromValue(notificationBanner.getOpacity());
-        notificationFadeOut.setToValue(0.0);
-        notificationFadeOut.setOnFinished(e -> {
-            notificationFadeOut = null;
-            notificationBanner.setVisible(false);
-            notificationBanner.setTranslateY(0.0);
-            notificationBanner.setScaleX(1.0);
-            notificationBanner.setScaleY(1.0);
-            if (notificationLabel != null) {
-                notificationLabel.setText("");
-            }
-        });
-        notificationFadeOut.play();
-    }
-
-    /**
-     * Soft aurora pulse behind the avatar while the bubble is on screen
-     * (single reusable timeline, opacity-only for Raspberry Pi performance).
-     */
-    private void startAvatarGlowPulse() {
-        if (notificationAvatarGlow == null) {
-            return;
-        }
-        if (avatarGlowPulse == null) {
-            avatarGlowPulse = new Timeline(
-                    new KeyFrame(Duration.ZERO,
-                            new KeyValue(notificationAvatarGlow.opacityProperty(), 0.35, Interpolator.EASE_BOTH)),
-                    new KeyFrame(Duration.millis(1100),
-                            new KeyValue(notificationAvatarGlow.opacityProperty(), 0.9, Interpolator.EASE_BOTH)));
-            avatarGlowPulse.setAutoReverse(true);
-            avatarGlowPulse.setCycleCount(Animation.INDEFINITE);
-        }
-        notificationAvatarGlow.setVisible(true);
-        avatarGlowPulse.playFrom(Duration.ZERO);
-    }
-
-    private void stopAvatarGlowPulse() {
-        if (avatarGlowPulse != null && avatarGlowPulse.getStatus() == Animation.Status.RUNNING) {
-            avatarGlowPulse.stop();
-        }
-        if (notificationAvatarGlow != null) {
-            notificationAvatarGlow.setVisible(false);
-        }
-    }
-
-    /**
-     * Returns an emoji icon for the given weather description.
-     */
-    private String getIconForWeather(String description) {
-        if (description == null) return "🌡️";
-        return switch (description.toLowerCase()) {
-            case "clear" -> "☀️";
-            case "clouds" -> "☁️";
-            case "rain" -> "🌧️";
-            case "drizzle" -> "🌦️";
-            case "thunderstorm" -> "⛈️";
-            case "snow" -> "❄️";
-            default -> "🌡️";
-        };
-    }
-
-    /**
-     * Helper to capitalize the first letter of each word in a string.
-     */
-    private String capitalize(String text) {
-        if (text == null || text.isEmpty()) return "";
-        return Character.toUpperCase(text.charAt(0)) + text.substring(1).toLowerCase();
+        notificationBubbleUi.dismiss();
     }
 
     /**
@@ -1083,10 +848,10 @@ public class AssistantController {
                 boolean success = spotifyService.exchangeCodeForTokens(authorizationCode);
                 Platform.runLater(() -> {
                     if (success) {
-                        System.out.println("Spotify successfully authorized.");
+                        Log.info("Controller", "Spotify successfully authorized.");
                         onSpotifyConnected();
                     } else {
-                        System.err.println("Spotify authorization failed.");
+                        Log.error("Controller", "Spotify authorization failed.");
                         if (spotifyAuthStatusLabel != null && spotifyAuthLayer.isVisible()) {
                             spotifyAuthStatusLabel.setText("No se pudo conectar, escanea de nuevo");
                             spotifyAuthStatusLabel.setStyle("-fx-text-fill: #ef4444;");
@@ -1112,7 +877,7 @@ public class AssistantController {
      */
     private void restoreOrRequestSpotifySession() {
         if (!spotifyService.restorePersistedSession()) {
-            System.out.println("Spotify: no stored session. Showing QR login.");
+            Log.info("Controller", "Spotify: no stored session. Showing QR login.");
             openSpotifyAuth();
             return;
         }
@@ -1120,9 +885,9 @@ public class AssistantController {
             boolean refreshed = spotifyService.refreshAccessToken();
             Platform.runLater(() -> {
                 if (refreshed) {
-                    System.out.println("Spotify session restored from stored tokens.");
+                    Log.info("Controller", "Spotify session restored from stored tokens.");
                 } else {
-                    System.out.println("Spotify stored session rejected. Showing QR login.");
+                    Log.info("Controller", "Spotify stored session rejected. Showing QR login.");
                     openSpotifyAuth();
                 }
             });
@@ -1179,7 +944,7 @@ public class AssistantController {
         }
         try {
             String authUrl = spotifyService.getAuthorizationUri();
-            System.out.println("Spotify Auth URL: " + authUrl);
+            Log.info("Controller", "Spotify Auth URL: " + authUrl);
 
             BitMatrix matrix = SpotifyQrGenerator.generate(authUrl);
             if (matrix == null) {
@@ -1204,7 +969,7 @@ public class AssistantController {
                 spotifyAuthStatusLabel.setStyle(null);
             }
         } catch (Exception e) {
-            System.err.println("Failed to generate Spotify Auth URL: " + e.getMessage());
+            Log.error("Controller", "Failed to generate Spotify Auth URL: " + e.getMessage());
             if (spotifyAuthStatusLabel != null) {
                 spotifyAuthStatusLabel.setText("Error generando el enlace de acceso");
             }
@@ -1317,7 +1082,7 @@ public class AssistantController {
         if (calendarGrid == null || displayedMonth == null) {
             return;
         }
-        String monthTitle = capitalize(displayedMonth.format(CALENDAR_MONTH_FORMAT));
+        String monthTitle = WeatherUi.capitalize(displayedMonth.format(CALENDAR_MONTH_FORMAT));
         calendarTitleLabel.setText(monthTitle);
 
         calendarDayCells.clear();
@@ -1403,7 +1168,7 @@ public class AssistantController {
         if (calendarEventList == null || selectedCalendarDate == null) {
             return;
         }
-        String dayTitle = capitalize(selectedCalendarDate.format(CALENDAR_DAY_FORMAT));
+        String dayTitle = WeatherUi.capitalize(selectedCalendarDate.format(CALENDAR_DAY_FORMAT));
         calendarSelectedDateLabel.setText(dayTitle);
 
         calendarEventList.getChildren().clear();
@@ -1530,10 +1295,10 @@ public class AssistantController {
                 int index = photoLibrary.indexOf(saved);
                 showPhotoAt(index >= 0 ? index : photoLibrary.size() - 1);
             });
-            System.out.println("PhotoFrame: stored Telegram photo (" + data.length + " bytes)");
+            Log.info("Controller", "PhotoFrame: stored Telegram photo (" + data.length + " bytes)");
             return true;
         } catch (Exception e) {
-            System.err.println("PhotoFrame: failed to store Telegram photo: " + e.getMessage());
+            Log.error("Controller", "PhotoFrame: failed to store Telegram photo: " + e.getMessage());
             return false;
         }
     }
@@ -1677,7 +1442,7 @@ public class AssistantController {
             if (!image.isError()) {
                 break;
             }
-            System.err.println("PhotoFrame: unreadable image skipped: " + photoLibrary.get(index));
+            Log.error("Controller", "PhotoFrame: unreadable image skipped: " + photoLibrary.get(index));
             image = null;
             index = Math.floorMod(index + 1, photoLibrary.size());
         }
@@ -1839,7 +1604,7 @@ public class AssistantController {
 
         if (!snapshot.offline()) {
             if (!voiceBackendOnline) {
-                System.out.println("Voice backend reachable; polling live.");
+                Log.info("Controller", "Voice backend reachable; polling live.");
             }
             voiceBackendOnline = true;
             maybeAutoStartRuntime(snapshot);
@@ -1848,7 +1613,7 @@ public class AssistantController {
             maybeSpawnVoiceBackend();
         }
 
-        String target = deriveUiState(snapshot);
+        String target = snapshot.deriveUiState();
         if (!target.equals(voiceUiState)) {
             transitionVoiceUi(target, snapshot);
         } else {
@@ -1864,7 +1629,7 @@ public class AssistantController {
         long now = System.currentTimeMillis();
         if (!snapshot.running() && now - lastVoiceAutoStartMs > 15000) {
             lastVoiceAutoStartMs = now;
-            System.out.println("Voice backend online but runtime stopped. Auto-starting...");
+            Log.info("Controller", "Voice backend online but runtime stopped. Auto-starting...");
             voiceService.startRuntime();
         }
     }
@@ -1885,28 +1650,6 @@ public class AssistantController {
         }
         lastVoiceSpawnAttemptMs = now;
         voiceExecutor.submit(voiceBackendLauncher::ensureRunning);
-    }
-
-    /**
-     * Maps a backend snapshot onto a coarse UI state key.
-     */
-    private String deriveUiState(VoiceAssistantSnapshot snapshot) {
-        if (snapshot.offline()) {
-            return "OFFLINE";
-        }
-        if (snapshot.isError()) {
-            return "ERROR";
-        }
-        if (snapshot.isListening()) {
-            return "LISTENING";
-        }
-        if (snapshot.isProcessing()) {
-            return "PROCESSING";
-        }
-        if (snapshot.isSpeaking()) {
-            return "SPEAKING";
-        }
-        return "IDLE";
     }
 
     /**
@@ -2048,11 +1791,11 @@ public class AssistantController {
         if (voiceMuted) {
             voiceService.stopRuntime();
             enterMutedUi();
-            System.out.println("Voice assistant muted by touch.");
+            Log.info("Controller", "Voice assistant muted by touch.");
         } else {
             voiceService.startRuntime();
             exitMutedUi();
-            System.out.println("Voice assistant unmuted by touch.");
+            Log.info("Controller", "Voice assistant unmuted by touch.");
         }
     }
 
@@ -2236,7 +1979,7 @@ public class AssistantController {
         activeRingingAlarm = alarm;
 
         // An alarm must be seen and answered: lift the night dim first.
-        wakeScreen();
+        nightDimming.wake();
 
         alarmRingTimeLabel.setText(alarm.displayTime());
         String title = alarm.label();
@@ -2255,7 +1998,7 @@ public class AssistantController {
                 alarmPlayer.seek(Duration.ZERO);
                 alarmPlayer.play();
             } catch (Exception e) {
-                System.err.println("Alarm audio playback failed: " + e.getMessage());
+                Log.error("Controller", "Alarm audio playback failed: " + e.getMessage());
             }
         }
 
@@ -2268,7 +2011,7 @@ public class AssistantController {
         fadeIn.setToValue(1.0);
         fadeIn.play();
 
-        System.out.println("Alarm ringing: " + alarm.displayTime());
+        Log.info("Controller", "Alarm ringing: " + alarm.displayTime());
     }
 
     /** Snooze button (+5 min) on the ring overlay. */
@@ -2322,7 +2065,7 @@ public class AssistantController {
         try {
             java.net.URL soundUrl = getClass().getResource("/com/example/nuriaassistant/sounds/alarm.wav");
             if (soundUrl == null) {
-                System.err.println("Alarm sound resource not found.");
+                Log.error("Controller", "Alarm sound resource not found.");
                 return;
             }
             Media media = new Media(soundUrl.toExternalForm());
@@ -2331,7 +2074,7 @@ public class AssistantController {
             player.setVolume(0.9);
             alarmPlayer = player;
         } catch (Exception e) {
-            System.err.println("Failed to prepare alarm audio: " + e.getMessage());
+            Log.error("Controller", "Failed to prepare alarm audio: " + e.getMessage());
         }
     }
 
@@ -2695,18 +2438,11 @@ public class AssistantController {
         stopThinkingDots();
         cancelReplyLinger();
         stopGlowPulse();
-        stopAvatarGlowPulse();
-        if (notificationSlideIn != null) {
-            notificationSlideIn.stop();
-            notificationSlideIn = null;
+        if (notificationBubbleUi != null) {
+            notificationBubbleUi.stopAnimations();
         }
-        if (notificationFadeOut != null) {
-            notificationFadeOut.stop();
-            notificationFadeOut = null;
-        }
-        if (dimFade != null) {
-            dimFade.stop();
-            dimFade = null;
+        if (nightDimming != null) {
+            nightDimming.stop();
         }
         if (photoSlideTimer != null) {
             photoSlideTimer.stop();

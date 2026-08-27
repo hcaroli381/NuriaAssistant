@@ -1,4 +1,5 @@
 package com.example.nuriaassistant.services;
+import com.example.nuriaassistant.util.Log;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -59,7 +60,7 @@ public class VoiceBackendLauncher {
         if (dir == null) {
             if (!missingDirLogged) {
                 missingDirLogged = true;
-                System.out.println("VoiceBackendLauncher: no local voice-backend/main.py found; "
+                Log.info("Launcher", "VoiceBackendLauncher: no local voice-backend/main.py found; "
                         + "set VOICE_BACKEND_DIR to enable auto-start from the jar.");
             }
             spawnAttempted = true;
@@ -81,13 +82,13 @@ public class VoiceBackendLauncher {
             pb.directory(dir.toFile());
             pb.redirectErrorStream(true);
             pb.inheritIO();
-            System.out.println("VoiceBackendLauncher: starting voice backend in " + dir
+            Log.info("Launcher", "VoiceBackendLauncher: starting voice backend in " + dir
                     + " (port " + port + ")...");
             process = pb.start();
             spawnAttempted = true;
             return true;
         } catch (IOException e) {
-            System.err.println("VoiceBackendLauncher: failed to start backend: " + e.getMessage()
+            Log.error("Launcher", "VoiceBackendLauncher: failed to start backend: " + e.getMessage()
                     + " — install deps with 'pip install -r requirements.txt' inside " + dir);
             return false;
         }
@@ -109,7 +110,7 @@ public class VoiceBackendLauncher {
                 Thread.currentThread().interrupt();
                 process.destroyForcibly();
             }
-            System.out.println("VoiceBackendLauncher: backend process stopped.");
+            Log.info("Launcher", "VoiceBackendLauncher: backend process stopped.");
         }
         process = null;
     }

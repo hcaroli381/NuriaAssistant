@@ -3,6 +3,7 @@ module com.example.nuriaassistant {
     requires javafx.fxml;
     requires javafx.media;
     requires java.desktop;
+    requires java.logging;
     requires java.net.http;
     requires jdk.httpserver;
     requires se.michaelthelin.spotify;

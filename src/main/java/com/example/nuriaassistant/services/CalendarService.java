@@ -1,4 +1,5 @@
 package com.example.nuriaassistant.services;
+import com.example.nuriaassistant.util.Log;
 
 import com.example.nuriaassistant.models.CalendarEvent;
 
@@ -79,7 +80,7 @@ public class CalendarService {
         try {
             return parseWindow(Files.readString(cacheFile, StandardCharsets.UTF_8));
         } catch (Exception e) {
-            System.err.println("CalendarService: failed to read cache: " + e.getMessage());
+            Log.error("Calendar", "CalendarService: failed to read cache: " + e.getMessage());
             return List.of();
         }
     }
@@ -108,7 +109,7 @@ public class CalendarService {
                 })
                 .whenComplete((events, error) -> {
                     if (error != null) {
-                        System.err.println("CalendarService: fetch failed: "
+                        Log.error("Calendar", "CalendarService: fetch failed: "
                                 + (error.getCause() != null ? error.getCause().getMessage() : error.getMessage()));
                         if (onError != null) {
                             onError.accept(error.getCause() != null ? error.getCause() : error);
@@ -140,7 +141,7 @@ public class CalendarService {
                 Files.move(tmp, cacheFile, StandardCopyOption.REPLACE_EXISTING);
             }
         } catch (IOException e) {
-            System.err.println("CalendarService: failed to cache feed: " + e.getMessage());
+            Log.error("Calendar", "CalendarService: failed to cache feed: " + e.getMessage());
         }
     }
 }

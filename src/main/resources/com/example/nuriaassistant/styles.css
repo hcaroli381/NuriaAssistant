@@ -23,7 +23,8 @@
 }
 
 .root-container {
-    -fx-background-color: transparent;
+    -fx-background-color: radial-gradient(focus-angle 0.0deg, focus-distance 0.0%, center 20.0% 20.0%, radius 100.0%,
+            #132a4a 0.0%, #0a192f 50.0%, #050d18 100.0%);
 }
 
 /* --------------------------------------------------------------------------
@@ -880,6 +881,34 @@
 
 .alarm-snooze-button:hover {
     -fx-background-color: rgba(245, 158, 11, 0.42);
+}
+
+/* --------------------------------------------------------------------------
+   Small inline-style refugees from the FXML: icon/text one-offs that used to
+   carry their own style="..." attribute. Grouped here so all theming lives
+   in one place.
+   -------------------------------------------------------------------------- */
+.spotify-speaker-icon {
+    -fx-font-size: 16px;
+}
+
+.spotify-brand-text {
+    -fx-text-fill: white;
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+}
+
+.spotify-art-placeholder {
+    -fx-font-size: 64px;
+    -fx-text-fill: #333d47;
+}
+
+.spotify-intro-backdrop {
+    -fx-background-color: rgba(0, 0, 0, 0.88);
+}
+
+.alarm-sheet-header-icon {
+    -fx-font-size: 24px;
 }
 
 .alarm-dismiss-button {

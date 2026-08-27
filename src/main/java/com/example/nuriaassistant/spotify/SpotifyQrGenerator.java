@@ -1,4 +1,5 @@
 package com.example.nuriaassistant.spotify;
+import com.example.nuriaassistant.util.Log;
 
 import com.google.zxing.EncodeHintType;
 import com.google.zxing.WriterException;
@@ -34,7 +35,7 @@ public final class SpotifyQrGenerator {
                             EncodeHintType.MARGIN, 2,
                             EncodeHintType.CHARACTER_SET, "UTF-8"));
         } catch (WriterException e) {
-            System.err.println("SpotifyQrGenerator: failed to encode QR: " + e.getMessage());
+            Log.error("SpotifyQR", "SpotifyQrGenerator: failed to encode QR: " + e.getMessage());
             return null;
         }
     }

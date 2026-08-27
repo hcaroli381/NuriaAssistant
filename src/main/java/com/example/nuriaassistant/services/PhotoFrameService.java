@@ -1,4 +1,5 @@
 package com.example.nuriaassistant.services;
+import com.example.nuriaassistant.util.Log;
 
 import java.io.IOException;
 import java.nio.file.AtomicMoveNotSupportedException;
@@ -74,7 +75,7 @@ public class PhotoFrameService {
                     .sorted(Comparator.comparing(p -> p.getFileName().toString()))
                     .forEach(result::add);
         } catch (IOException e) {
-            System.err.println("PhotoFrameService: failed to list photos: " + e.getMessage());
+            Log.error("PhotoFrame", "PhotoFrameService: failed to list photos: " + e.getMessage());
         }
         return result;
     }
@@ -90,7 +91,7 @@ public class PhotoFrameService {
             try {
                 Files.deleteIfExists(photos.get(i));
             } catch (IOException e) {
-                System.err.println("PhotoFrameService: failed to delete old photo: " + e.getMessage());
+                Log.error("PhotoFrame", "PhotoFrameService: failed to delete old photo: " + e.getMessage());
             }
         }
     }

@@ -1,4 +1,5 @@
 package com.example.nuriaassistant.services;
+import com.example.nuriaassistant.util.Log;
 
 import com.example.nuriaassistant.models.VoiceAssistantSnapshot;
 import javafx.application.Platform;
@@ -82,7 +83,7 @@ public class VoiceAssistantService {
 
         httpClient.sendAsync(request, HttpResponse.BodyHandlers.discarding())
                 .exceptionally(ex -> {
-                    System.err.println("VoiceAssistantService: " + path + " request failed: " + ex.getMessage());
+                    Log.error("Voice", "VoiceAssistantService: " + path + " request failed: " + ex.getMessage());
                     return null;
                 });
     }

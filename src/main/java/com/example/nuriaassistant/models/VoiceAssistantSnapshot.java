@@ -55,4 +55,28 @@ public record VoiceAssistantSnapshot(
     public boolean isActive() {
         return isListening() || isProcessing() || isSpeaking();
     }
+
+    /**
+     * Maps this backend snapshot onto the coarse UI state key used by the
+     * front-end state machine (OFFLINE / ERROR / LISTENING / PROCESSING /
+     * SPEAKING / IDLE).
+     */
+    public String deriveUiState() {
+        if (offline) {
+            return "OFFLINE";
+        }
+        if (isError()) {
+            return "ERROR";
+        }
+        if (isListening()) {
+            return "LISTENING";
+        }
+        if (isProcessing()) {
+            return "PROCESSING";
+        }
+        if (isSpeaking()) {
+            return "SPEAKING";
+        }
+        return "IDLE";
+    }
 }

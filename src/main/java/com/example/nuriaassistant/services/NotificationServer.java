@@ -1,4 +1,5 @@
 package com.example.nuriaassistant.services;
+import com.example.nuriaassistant.util.Log;
 
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
@@ -37,18 +38,18 @@ public class NotificationServer {
             });
             server.setExecutor(null);
             server.start();
-            System.out.println("Notification server started on port " + port);
+            Log.info("NotificationServer", "Notification server started on port " + port);
 
             Runtime.getRuntime().addShutdownHook(new Thread(this::stop));
         } catch (IOException e) {
-            System.err.println("Warning: Notification server failed to start on port " + port + ": " + e.getMessage());
+            Log.error("NotificationServer", "Warning: Notification server failed to start on port " + port + ": " + e.getMessage());
         }
     }
 
     public void stop() {
         if (server != null) {
             server.stop(0);
-            System.out.println("Notification server stopped.");
+            Log.info("NotificationServer", "Notification server stopped.");
         }
     }
 }
