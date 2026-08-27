@@ -26,7 +26,11 @@ public class VoiceAssistantService {
         this.baseUrl = baseUrl != null && !baseUrl.isBlank()
                 ? baseUrl.replaceAll("/+$", "")
                 : "http://127.0.0.1:8090";
+        // Force HTTP/1.1: the backend is plain http:// and the JDK's default
+        // HTTP/2 preference would send an h2c upgrade on every connection,
+        // which uvicorn logs as an unsupported WebSocket upgrade request.
         this.httpClient = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(Duration.ofSeconds(2))
                 .build();
         this.stateRequest = HttpRequest.newBuilder()

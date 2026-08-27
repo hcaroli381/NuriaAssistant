@@ -122,9 +122,11 @@ The Pi has no browser or keyboard, so authorization happens on her phone:
   ./mvnw clean package -Ppi -Djavafx.platform=linux-aarch64 -DskipTests
   # -> target/NuriaAssistant-1.0-SNAPSHOT-all.jar (~16 MB)
   scp target/NuriaAssistant-1.0-SNAPSHOT-all.jar pi@<PI_IP>:~/
-  ssh pi@<PI_IP> 'java -jar NuriaAssistant-1.0-SNAPSHOT-all.jar'
+  ssh pi@<PI_IP> 'JDK_JAVA_OPTIONS="-Xms64m -Xmx384m -XX:+UseSerialGC -XX:TieredStopAtLevel=1" java -jar NuriaAssistant-1.0-SNAPSHOT-all.jar'
   ```
   Never use `-Ppi` for local dev/`javafx:run` — it bundles ARM natives that won't load on x86.
+
+  **Pi 3 recommended JVM flags** (already wired into `deploy/nuria-assistant.service` via `JDK_JAVA_OPTIONS`): `-Xms64m -Xmx384m` caps the heap on the 1 GB box, `-XX:+UseSerialGC` uses the lowest-overhead single-threaded collector at that heap size, and `-XX:TieredStopAtLevel=1` skips the C2 JIT entirely — far less compilation on the slow ARM cores and faster startup, at no cost for an event-driven UI.
 
 ## UI and Theming Guidelines
 
@@ -207,6 +209,7 @@ The Pi has no browser or keyboard, so authorization happens on her phone:
   - `VOICE_BACKEND_DIR`: (Optional) Path to `voice-backend/` for jar auto-spawn; auto-detected at `./voice-backend`, `~/voice-backend`, `~/.alpha/voice-backend` when unset.
   - `VOICE_PYTHON_BIN`: (Optional) Python interpreter for the spawned backend; defaults to `<dir>/.venv/bin/python` when present, else `python3`.
   - `CALENDAR_ICS_URL`: Public read-only iCloud calendar `.ics` share link; empty = calendar feature silently off.
+  - `DIM_IDLE_MINUTES` / `DIM_START_HOUR` / `DIM_END_HOUR`: Night dimming screen-saver (dim after N idle minutes between these hours, default 10 / 22 / 8; start > end crosses midnight). Tap anywhere to wake.
 
 ## Voice Assistant Backend (Python on Raspberry Pi)
 
@@ -247,7 +250,9 @@ The backend can emit/execute structured actions:
 - `.env` is loaded via `python-dotenv` relative to `main.py` itself, so uvicorn can be launched from any working directory.
 - Relative model paths (`VOSK_MODEL_PATH`, `PIPER_MODEL_PATH`, `VOICE_WAKEWORD_MODEL_PATH`) are resolved against the backend directory, keeping the same `.env` portable across machines.
 - **Pre-speech timeout** (`VOICE_PRE_SPEECH_TIMEOUT_SECONDS`, default 2.5s): if the wake word fires but nobody starts speaking, capture ends and the runtime returns to idle instead of waiting the full 8s speech window.
-- **Post-reply echo flush** (`VOICE_POST_REPLY_FLUSH_SECONDS`, default 0.8s): buffered mic audio (which contains the TTS echo of Alpha's own voice) is discarded after every answer to prevent self-triggered listening cycles.
+- **Post-reply echo flush** (`VOICE_POST_REPLY_FLUSH_SECONDS`, default 1.2s): buffered mic audio (which contains the TTS echo of Alpha's own voice) is discarded after every answer to prevent self-triggered listening cycles.
+- **Wake confirmation + post-reply quiet period:** the wake word must score above `VOICE_WAKE_THRESHOLD` on two consecutive audio chunks before firing (a single spurious spike never wakes her), and after every reply the wake word stays ignored for `VOICE_POST_REPLY_QUIET_SECONDS` (default 4s) so her own voice echo and surrounding room chatter cannot re-trigger her.
+- **`.env` gotcha:** duplicate keys — python-dotenv lets the *last* value win. An appended `VOICE_WAKE_THRESHOLD=0.03` silently overrode the base 0.45 and caused constant false wake-ups; keep one value per key.
 - Muting from the front-end simply calls `POST /assistant/stop` (mic off, models stay loaded); unmuting calls `/assistant/start`. The JavaFX auto-start never fights a manual mute.
 - **Jar-run mode:** when launched via `java -jar` without systemd, `VoiceBackendLauncher` spawns uvicorn (`<python> -m uvicorn main:app --host 0.0.0.0 --port 8090`, cwd = backend dir) on the first failed poll, throttled to one retry per 20s; missing `voice-backend/main.py` disables the feature for that run (logged once). The child inherits stdout/stderr and is destroyed on app shutdown — do not also enable `nuria-voice.service` on the same box or port.
 
@@ -306,6 +311,8 @@ curl http://127.0.0.1:8090/health
 scp target/NuriaAssistant-1.0-SNAPSHOT-all.jar pi@<PI_IP>:~/
 ssh pi@<PI_IP>
 DISPLAY=:0 java -jar NuriaAssistant-1.0-SNAPSHOT-all.jar
+# Same command with the recommended Pi 3 JVM tuning (see Performance Notes):
+DISPLAY=:0 JDK_JAVA_OPTIONS='-Xms64m -Xmx384m -XX:+UseSerialGC -XX:TieredStopAtLevel=1' java -jar NuriaAssistant-1.0-SNAPSHOT-all.jar
 # Optional on Pi 3 if GPU/GL is flaky:
 DISPLAY=:0 java -Dprism.forceSw=true -jar NuriaAssistant-1.0-SNAPSHOT-all.jar
 
@@ -323,7 +330,8 @@ Rules to keep the UI smooth at 1024x600 on the Pi — do not regress these:
 - **Never repaint identical state.** Spotify polling results are signature-deduplicated (`lastTrackSignature`): text labels and cover art are only touched when track/device/cover actually changed. Voice UI is a change-deduplicated state machine.
 - **Cache animated nodes.** All overlays that animate opacity/scale (`voiceOrb`, `voiceCard`, `notificationBanner`, `alarmGlowPane`, `alarmRingLayer`, `spotify*Layer`...) get `setCache(true)` once in `initialize()` so gradients/effects rasterize once instead of per pulse.
 - **Keep periodic work off the FX animation clock.** Only the 1-second clock tick is an FX `Timeline` (it must be, for label updates + alarm checks). Weather (30 min), Spotify polls (4s) and voice polls (1s) run on the shared daemon `backgroundTicker`.
-- **Cheap ticks stay cheap:** the date label only re-renders at midnight; the next-alarm hint refreshes once per minute; the alarm due-check is allocation-free.
+- **Cheap ticks stay cheap:** the date label only re-renders at midnight; the next-alarm / next-event hints and calendar badge recompute once per minute **but only rewrite their labels when the text actually changes** (text layout is the most expensive scene-graph op on the Pi — see the cached hint fields in `AssistantController`); the alarm due-check is allocation-free.
+- **No per-call regex compilation:** `TelegramService` precompiles every `Pattern` as a static constant — the long-poll loop parses every `getUpdates` payload and compiled-per-chunk regexes would waste CPU on every poll.
 - **Back off when idle:** voice polls drop to 1 attempt / 5s while the backend is unreachable *or muted*; `VoiceBackendLauncher` gives up after one missing-dir check per run and throttles real spawn retries to 20s.
 - **Prebuilt HTTP requests** (`VoiceAssistantService.stateRequest`) and single-threaded executors avoid per-tick allocation churn.
 

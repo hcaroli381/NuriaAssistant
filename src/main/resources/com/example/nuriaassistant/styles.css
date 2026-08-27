@@ -896,3 +896,11 @@
 .alarm-dismiss-button:hover {
     -fx-background-color: #6ee7b7;
 }
+
+/* --------------------------------------------------------------------------
+   Night Dim Overlay (screen-saver dim while idle during night hours)
+   Tap anywhere to wake. The alarm ring sits above it and always stays tappable.
+   -------------------------------------------------------------------------- */
+.dim-overlay {
+    -fx-background-color: rgba(2, 8, 20, 0.88);
+}

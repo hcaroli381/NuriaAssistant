@@ -35,6 +35,23 @@ public class TelegramService {
 
     private static final Pattern UPDATE_SPLIT = Pattern.compile("\"update_id\"\\s*:\\s*");
 
+    // Precompiled patterns: the poll loop parses every getUpdates response, so
+    // compiling these once (instead of per chunk / per request) avoids
+    // repeated regex-compilation work on the Pi.
+    private static final Pattern UPDATE_ID = Pattern.compile("^\\s*(\\d+)");
+    private static final Pattern CHAT_ID = Pattern.compile("\"chat\"\\s*:\\s*\\{([\\s\\S]*?)\"id\"\\s*:\\s*(-?\\d+)");
+    private static final Pattern SENDER_NAME = Pattern.compile("\"from\"\\s*:\\s*\\{([\\s\\S]*?)\"first_name\"\\s*:\\s*\"([^\"]+)\"");
+    private static final Pattern TEXT_VALUE = Pattern.compile("\"text\"\\s*:\\s*\"((?:\\\\\"|[^\"])*)\"");
+    private static final Pattern PHOTO_ARRAY = Pattern.compile("\"photo\"\\s*:\\s*\\[([\\s\\S]*?)]");
+    private static final Pattern OBJECT_BODY = Pattern.compile("\\{([^{}]*)}");
+    private static final Pattern FILE_ID_VALUE = Pattern.compile("\"file_id\"\\s*:\\s*\"([^\"]+)\"");
+    private static final Pattern WIDTH_VALUE = Pattern.compile("\"width\"\\s*:\\s*(\\d+)");
+    private static final Pattern HEIGHT_VALUE = Pattern.compile("\"height\"\\s*:\\s*(\\d+)");
+    private static final Pattern DOCUMENT_OBJ = Pattern.compile("\"document\"\\s*:\\s*\\{([^{}]*)}");
+    private static final Pattern MIME_IMAGE = Pattern.compile("\"mime_type\"\\s*:\\s*\"image/([^\"]+)\"");
+    private static final Pattern FILE_SIZE_VALUE = Pattern.compile("\"file_size\"\\s*:\\s*(\\d+)");
+    private static final Pattern FILE_PATH_VALUE = Pattern.compile("\"file_path\"\\s*:\\s*\"([^\"]+)\"");
+
     private final String botToken;
     private final String allowedChatId;
     private final Consumer<String> onMessageReceived;
@@ -240,7 +257,7 @@ public class TelegramService {
             throw new IllegalStateException("getFile returned " + response.statusCode());
         }
         String body = response.body();
-        Matcher sizeMatcher = Pattern.compile("\"file_size\"\\s*:\\s*(\\d+)").matcher(body);
+        Matcher sizeMatcher = FILE_SIZE_VALUE.matcher(body);
         long size = sizeMatcher.find() ? Long.parseLong(sizeMatcher.group(1)) : 0L;
         if (!body.contains("\"ok\":true")) {
             throw new IllegalStateException("getFile not ok: " + body);
@@ -261,7 +278,7 @@ public class TelegramService {
             throw new IllegalStateException("getFile returned " + response.statusCode());
         }
 
-        Matcher pathMatcher = Pattern.compile("\"file_path\"\\s*:\\s*\"([^\"]+)\"").matcher(response.body());
+        Matcher pathMatcher = FILE_PATH_VALUE.matcher(response.body());
         if (!pathMatcher.find()) {
             throw new IllegalStateException("getFile response missing file_path");
         }
@@ -319,7 +336,7 @@ public class TelegramService {
             String chunk = chunks[i];
             try {
                 // 1. Extract update_id
-                Matcher idMatcher = Pattern.compile("^\\s*(\\d+)").matcher(chunk);
+                Matcher idMatcher = UPDATE_ID.matcher(chunk);
                 if (!idMatcher.find()) {
                     continue;
                 }
@@ -332,21 +349,21 @@ public class TelegramService {
 
                 // 3. Extract chat_id
                 long chatId = 0;
-                Matcher chatMatcher = Pattern.compile("\"chat\"\\s*:\\s*\\{([\\s\\S]*?)\"id\"\\s*:\\s*(-?\\d+)").matcher(chunk);
+                Matcher chatMatcher = CHAT_ID.matcher(chunk);
                 if (chatMatcher.find()) {
                     chatId = Long.parseLong(chatMatcher.group(2));
                 }
 
                 // 4. Extract sender first_name
                 String senderName = "Telegram";
-                Matcher nameMatcher = Pattern.compile("\"from\"\\s*:\\s*\\{([\\s\\S]*?)\"first_name\"\\s*:\\s*\"([^\"]+)\"").matcher(chunk);
+                Matcher nameMatcher = SENDER_NAME.matcher(chunk);
                 if (nameMatcher.find()) {
                     senderName = decodeUnicode(nameMatcher.group(2));
                 }
 
                 // 5. Extract message text
                 String text = "";
-                Matcher textMatcher = Pattern.compile("\"text\"\\s*:\\s*\"((?:\\\\\"|[^\"])*)\"").matcher(chunk);
+                Matcher textMatcher = TEXT_VALUE.matcher(chunk);
                 if (textMatcher.find()) {
                     text = decodeUnicode(textMatcher.group(1).replace("\\\"", "\""));
                 }
@@ -376,7 +393,7 @@ public class TelegramService {
         for (int i = 1; i < chunks.length; i++) {
             String chunk = chunks[i];
             try {
-                Matcher idMatcher = Pattern.compile("^\\s*(\\d+)").matcher(chunk);
+                Matcher idMatcher = UPDATE_ID.matcher(chunk);
                 if (!idMatcher.find()) {
                     continue;
                 }
@@ -393,13 +410,13 @@ public class TelegramService {
                 }
 
                 long chatId = 0;
-                Matcher chatMatcher = Pattern.compile("\"chat\"\\s*:\\s*\\{([\\s\\S]*?)\"id\"\\s*:\\s*(-?\\d+)").matcher(chunk);
+                Matcher chatMatcher = CHAT_ID.matcher(chunk);
                 if (chatMatcher.find()) {
                     chatId = Long.parseLong(chatMatcher.group(2));
                 }
 
                 String senderName = "Telegram";
-                Matcher nameMatcher = Pattern.compile("\"from\"\\s*:\\s*\\{([\\s\\S]*?)\"first_name\"\\s*:\\s*\"([^\"]+)\"").matcher(chunk);
+                Matcher nameMatcher = SENDER_NAME.matcher(chunk);
                 if (nameMatcher.find()) {
                     senderName = decodeUnicode(nameMatcher.group(2));
                 }
@@ -414,7 +431,7 @@ public class TelegramService {
 
     /** Returns the file_id of the largest PhotoSize inside the "photo" array, or null. */
     private static String extractLargestPhotoId(String chunk) {
-        Matcher arrayMatcher = Pattern.compile("\"photo\"\\s*:\\s*\\[([\\s\\S]*?)]").matcher(chunk);
+        Matcher arrayMatcher = PHOTO_ARRAY.matcher(chunk);
         if (!arrayMatcher.find()) {
             return null;
         }
@@ -422,13 +439,13 @@ public class TelegramService {
 
         String bestId = null;
         long bestArea = -1;
-        Matcher objectMatcher = Pattern.compile("\\{([^{}]*)}").matcher(arrayBody);
+        Matcher objectMatcher = OBJECT_BODY.matcher(arrayBody);
         while (objectMatcher.find()) {
             String body = objectMatcher.group(1);
             try {
-                Matcher idMatcher = Pattern.compile("\"file_id\"\\s*:\\s*\"([^\"]+)\"").matcher(body);
-                Matcher wMatcher = Pattern.compile("\"width\"\\s*:\\s*(\\d+)").matcher(body);
-                Matcher hMatcher = Pattern.compile("\"height\"\\s*:\\s*(\\d+)").matcher(body);
+                Matcher idMatcher = FILE_ID_VALUE.matcher(body);
+                Matcher wMatcher = WIDTH_VALUE.matcher(body);
+                Matcher hMatcher = HEIGHT_VALUE.matcher(body);
                 if (!idMatcher.find()) {
                     continue;
                 }
@@ -446,13 +463,13 @@ public class TelegramService {
 
     /** Returns the file_id of an attached image document, or null when absent/not an image. */
     private static String extractImageDocumentId(String chunk) {
-        Matcher docMatcher = Pattern.compile("\"document\"\\s*:\\s*\\{([^{}]*)}").matcher(chunk);
+        Matcher docMatcher = DOCUMENT_OBJ.matcher(chunk);
         if (!docMatcher.find()) {
             return null;
         }
         String body = docMatcher.group(1);
-        Matcher mimeMatcher = Pattern.compile("\"mime_type\"\\s*:\\s*\"image/([^\"]+)\"").matcher(body);
-        Matcher idMatcher = Pattern.compile("\"file_id\"\\s*:\\s*\"([^\"]+)\"").matcher(body);
+        Matcher mimeMatcher = MIME_IMAGE.matcher(body);
+        Matcher idMatcher = FILE_ID_VALUE.matcher(body);
         if (mimeMatcher.find() && idMatcher.find()) {
             return idMatcher.group(1);
         }

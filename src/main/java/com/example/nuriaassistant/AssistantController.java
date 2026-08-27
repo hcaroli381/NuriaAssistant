@@ -302,6 +302,10 @@ public class AssistantController {
     @FXML
     private Label alarmRingTitleLabel;
 
+    // Night Dim Overlay UI (screen-saver dim while idle at night)
+    @FXML
+    private AnchorPane dimLayer;
+
     // Spotify QR Auth Overlay UI
     @FXML
     private AnchorPane spotifyAuthLayer;
@@ -356,6 +360,22 @@ public class AssistantController {
     private int lastAlarmHintMinute = -1;
     private String cachedDateText = null;
 
+    // Night Dimming State (screen saver: dim after idle time during night hours)
+    private long lastInteractionMillis = System.currentTimeMillis();
+    private boolean screenDimmed = false;
+    private FadeTransition dimFade = null;
+    private int dimIdleMinutes = 10;
+    private int dimStartHour = 22;
+    private int dimEndHour = 8;
+
+    // Per-minute hint caches: text layout is the most expensive operation on the
+    // Pi, so the next-alarm / next-event / calendar-badge labels are only
+    // rewritten when their content actually changes.
+    private static final DateTimeFormatter EVENT_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
+    private String cachedNextAlarmSummary = null;
+    private String cachedNextEventSummary = null;
+    private int cachedCalendarBadgeCount = -1;
+
     // Alarm Editor State (null id = creating a new alarm)
     private Alarm editingAlarm = null;
     private int editorHour = 7;
@@ -390,6 +410,10 @@ public class AssistantController {
         t.setDaemon(true);
         return t;
     });
+    // True while a Spotify poll is still awaiting its HTTP response: skips the
+    // next ticker submission so a slow/hung API call can never queue up polls
+    // that would burst-fire once the connection recovers.
+    private volatile boolean spotifyPollInFlight = false;
 
     // Background thread executor for non-blocking voice backend polling
     private final ExecutorService voiceExecutor = Executors.newSingleThreadExecutor(r -> {
@@ -489,6 +513,13 @@ public class AssistantController {
             System.err.println("Failed to start notification server: " + e.getMessage());
         }
 
+        // 3b. Night dimming: config + interaction tracking. Any touch counts as
+        //     activity; the screen dims only after idle time during night hours.
+        configureNightDimming(configLoader);
+        rootPane.addEventFilter(MouseEvent.MOUSE_PRESSED, e -> touchActivity());
+        rootPane.addEventFilter(MouseEvent.MOUSE_DRAGGED, e -> touchActivity());
+        rootPane.addEventFilter(MouseEvent.MOUSE_MOVED, e -> touchActivity());
+
         // 4. Initialize Spotify Service (+ silent session restore / QR login)
         String clientId = configLoader.getProperty("SPOTIFY_CLIENT_ID");
         String clientSecret = configLoader.getProperty("SPOTIFY_CLIENT_SECRET");
@@ -577,6 +608,7 @@ public class AssistantController {
         }
 
         checkAlarms(now);
+        checkDimming(now);
         if (now.getMinute() != lastAlarmHintMinute) {
             lastAlarmHintMinute = now.getMinute();
             refreshNextAlarmHint();
@@ -585,17 +617,110 @@ public class AssistantController {
         }
     }
 
+    // =========================================================================
+    // NIGHT DIMMING (screen saver)
+    // =========================================================================
+
+    private void configureNightDimming(ConfigLoader configLoader) {
+        String idle = configLoader.getProperty("DIM_IDLE_MINUTES");
+        if (idle != null) {
+            try {
+                dimIdleMinutes = Math.max(1, Integer.parseInt(idle.trim()));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        String start = configLoader.getProperty("DIM_START_HOUR");
+        if (start != null) {
+            try {
+                dimStartHour = Math.floorMod(Integer.parseInt(start.trim()), 24);
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        String end = configLoader.getProperty("DIM_END_HOUR");
+        if (end != null) {
+            try {
+                dimEndHour = Math.floorMod(Integer.parseInt(end.trim()), 24);
+            } catch (NumberFormatException ignored) {
+            }
+        }
+    }
+
+    /** Runs every second from the clock tick: dim / wake based on night hours + idle time. */
+    private void checkDimming(LocalDateTime now) {
+        boolean night = isNightHour(now.getHour());
+        boolean idleLong = System.currentTimeMillis() - lastInteractionMillis >= dimIdleMinutes * 60_000L;
+        if (screenDimmed) {
+            if (!night || !idleLong) {
+                wakeScreen();
+            }
+        } else if (night && idleLong) {
+            dimScreen();
+        }
+    }
+
+    /** True when the given hour falls inside the dim window (supports crossing midnight). */
+    private boolean isNightHour(int hour) {
+        if (dimStartHour <= dimEndHour) {
+            return hour >= dimStartHour && hour < dimEndHour;
+        }
+        return hour >= dimStartHour || hour < dimEndHour;
+    }
+
+    private void dimScreen() {
+        if (screenDimmed || dimLayer == null) {
+            return;
+        }
+        screenDimmed = true;
+        if (dimFade != null) {
+            dimFade.stop();
+        }
+        dimLayer.setVisible(true);
+        dimFade = new FadeTransition(Duration.millis(900), dimLayer);
+        dimFade.setFromValue(0.0);
+        dimFade.setToValue(1.0);
+        dimFade.play();
+    }
+
+    /** Any touch on the screen: marks activity and lifts the dim when present. */
+    private void touchActivity() {
+        lastInteractionMillis = System.currentTimeMillis();
+        if (screenDimmed) {
+            wakeScreen();
+        }
+    }
+
+    private void wakeScreen() {
+        if (!screenDimmed || dimLayer == null) {
+            return;
+        }
+        screenDimmed = false;
+        if (dimFade != null) {
+            dimFade.stop();
+        }
+        dimFade = new FadeTransition(Duration.millis(500), dimLayer);
+        dimFade.setFromValue(dimLayer.getOpacity());
+        dimFade.setToValue(0.0);
+        dimFade.setOnFinished(e -> dimLayer.setVisible(false));
+        dimFade.play();
+    }
+
     /**
      * Polls Spotify for current playback state on a background thread.
      */
     private void pollCurrentlyPlaying() {
-        if (spotifyService == null || spotifyService.getAccessToken() == null) {
+        if (spotifyService == null || spotifyService.getAccessToken() == null
+                || spotifyPollInFlight) {
             return;
         }
 
+        spotifyPollInFlight = true;
         spotifyExecutor.submit(() -> {
-            SpotifyTrackData trackData = spotifyService.getCurrentTrackData();
-            Platform.runLater(() -> updateSpotifyUi(trackData));
+            try {
+                SpotifyTrackData trackData = spotifyService.getCurrentTrackData();
+                Platform.runLater(() -> updateSpotifyUi(trackData));
+            } finally {
+                spotifyPollInFlight = false;
+            }
         });
     }
 
@@ -787,6 +912,8 @@ public class AssistantController {
      */
     private void displayNotification(String message) {
         Platform.runLater(() -> {
+            // A remote message should always be seen: lift the night dim first.
+            wakeScreen();
             if (message == null || message.trim().isEmpty()) {
                 hideNotificationBubble(true);
                 return;
@@ -1318,8 +1445,13 @@ public class AssistantController {
                 count++;
             }
         }
-        calendarBadgeLabel.setVisible(count > 0);
-        calendarBadgeLabel.setText(String.valueOf(count));
+        // Only touch the label when the badge value actually changed (once per
+        // minute the comparison is cheap; the layout rewrite is not).
+        if (count != cachedCalendarBadgeCount) {
+            cachedCalendarBadgeCount = count;
+            calendarBadgeLabel.setVisible(count > 0);
+            calendarBadgeLabel.setText(String.valueOf(count));
+        }
     }
 
     /** Pre-sorted lookup of events overlapping the given date (linear scan; lists are small). */
@@ -1364,7 +1496,7 @@ public class AssistantController {
             } else {
                 when = startDate.getDayOfMonth() + "/" + startDate.getMonthValue();
             }
-            String timePart = next.allDay() ? "" : " " + next.start().format(DateTimeFormatter.ofPattern("HH:mm"));
+            String timePart = next.allDay() ? "" : " " + next.start().format(EVENT_TIME_FORMATTER);
             String title = next.title();
             if (title.length() > 26) {
                 title = title.substring(0, 26) + "\u2026";
@@ -1372,8 +1504,12 @@ public class AssistantController {
             summary = title + " \u00b7 " + when + timePart;
         }
 
-        nextEventRow.setVisible(summary != null);
-        nextEventLabel.setText(summary != null ? summary : "");
+        // Rewrite the label only when the summary text actually changed.
+        if (summary == null || !summary.equals(cachedNextEventSummary)) {
+            cachedNextEventSummary = summary;
+            nextEventRow.setVisible(summary != null);
+            nextEventLabel.setText(summary != null ? summary : "");
+        }
     }
 
     // =========================================================================
@@ -2088,6 +2224,9 @@ public class AssistantController {
     private void startRinging(Alarm alarm) {
         activeRingingAlarm = alarm;
 
+        // An alarm must be seen and answered: lift the night dim first.
+        wakeScreen();
+
         alarmRingTimeLabel.setText(alarm.displayTime());
         String title = alarm.label();
         alarmRingTitleLabel.setText(title == null || title.isBlank() ? "Alarma" : title);
@@ -2214,8 +2353,12 @@ public class AssistantController {
             return;
         }
         String summary = alarmService != null ? alarmService.nextAlarmSummary() : null;
-        nextAlarmRow.setVisible(summary != null);
-        nextAlarmLabel.setText(summary != null ? summary : "");
+        // Rewrite the label only when the summary text actually changed.
+        if (summary == null || !summary.equals(cachedNextAlarmSummary)) {
+            cachedNextAlarmSummary = summary;
+            nextAlarmRow.setVisible(summary != null);
+            nextAlarmLabel.setText(summary != null ? summary : "");
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -2549,6 +2692,10 @@ public class AssistantController {
         if (notificationFadeOut != null) {
             notificationFadeOut.stop();
             notificationFadeOut = null;
+        }
+        if (dimFade != null) {
+            dimFade.stop();
+            dimFade = null;
         }
         if (photoSlideTimer != null) {
             photoSlideTimer.stop();

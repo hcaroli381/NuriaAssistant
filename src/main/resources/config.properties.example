@@ -8,3 +8,8 @@ SPOTIFY_REDIRECT_URI=http://127.0.0.1:8888/callback
 
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_ALLOWED_CHAT_ID=
+
+# Night dimming (screen saver): dim after N idle minutes between these hours
+DIM_IDLE_MINUTES=10
+DIM_START_HOUR=22
+DIM_END_HOUR=8

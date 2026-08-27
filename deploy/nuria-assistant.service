@@ -15,6 +15,11 @@ ExecStartPre=/bin/bash -c 'for i in $(seq 1 60); do [ -e /tmp/.X11-unix/X0 ] && 
 
 Environment=DISPLAY=:0
 
+# Pi 3 tuned JVM: capped heap (1 GB RAM box), single-threaded serial GC
+# (lowest CPU/thread overhead at small heaps) and C1-only JIT (far less
+# compilation work on the slow ARM cores; plenty for an event-driven UI).
+Environment=JDK_JAVA_OPTIONS='-Xms64m -Xmx384m -XX:+UseSerialGC -XX:TieredStopAtLevel=1'
+
 ExecStart=/bin/bash -lc 'cd __PROJECT_DIR__ && ./mvnw javafx:run'
 Restart=always
 RestartSec=10

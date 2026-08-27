@@ -59,6 +59,10 @@ class Settings:
     pre_speech_timeout_seconds: float = _env_float("VOICE_PRE_SPEECH_TIMEOUT_SECONDS", 2.5)
     post_reply_flush_seconds: float = _env_float("VOICE_POST_REPLY_FLUSH_SECONDS", 0.8)
     wake_cooldown_seconds: float = _env_float("VOICE_WAKE_COOLDOWN_SECONDS", 2.5)
+    # Extra quiet time after Alpha finishes replying: the wake word stays
+    # ignored so her own voice echo and surrounding chatter cannot re-trigger
+    # her right after an answer.
+    post_reply_quiet_seconds: float = _env_float("VOICE_POST_REPLY_QUIET_SECONDS", 4.0)
 
     wakeword_model_path: str = _env("VOICE_WAKEWORD_MODEL_PATH", "")
     wakeword_model_name: str = _env("VOICE_WAKEWORD_MODEL_NAME", "hey_jarvis")
@@ -93,6 +97,14 @@ class Settings:
                 path = Path(value).expanduser()
                 if not path.is_absolute():
                     setattr(self, name, str(base / path))
+        # Same treatment for the piper binary: a path like ./.venv/bin/piper
+        # must resolve relative to this directory, while a bare command name
+        # (e.g. "piper") is left untouched for PATH lookup.
+        piper_bin = self.piper_bin
+        if piper_bin and any(sep in piper_bin for sep in ("/", "\\")):
+            path = Path(piper_bin).expanduser()
+            if not path.is_absolute():
+                self.piper_bin = str(base / path)
 
 
 class AssistantState(str, Enum):
@@ -171,6 +183,7 @@ class VoiceAssistantRuntime:
             model_path = Path(self.settings.wakeword_model_path)
             if not model_path.exists():
                 raise FileNotFoundError(f"Wake word model path not found: {model_path}")
+            self._ensure_openwakeword_resources()
             return OpenWakeWordModel(
                 wakeword_models=[str(model_path)],
                 inference_framework="onnx" if str(model_path).endswith(".onnx") else "tflite",
@@ -189,6 +202,18 @@ class VoiceAssistantRuntime:
                 wakeword_models=[model_name],
                 inference_framework="onnx",
             )
+
+    @staticmethod
+    def _ensure_openwakeword_resources() -> None:
+        # openwakeword's wheel ships no ONNX feature-extraction models; they are
+        # fetched from GitHub on first use. Without them, even a locally provided
+        # wake word model fails to load (missing melspectrogram.onnx).
+        import openwakeword
+
+        resources_dir = Path(openwakeword.__file__).resolve().parent / "resources" / "models"
+        if not (resources_dir / "melspectrogram.onnx").exists():
+            # Empty model list: fetches feature-extraction + VAD models only.
+            openwakeword_download_models(model_names=[])
 
     def _load_vosk_model(self) -> VoskModel:
         if not self.settings.vosk_model_path:
@@ -242,7 +267,11 @@ class VoiceAssistantRuntime:
             self._led.set_state(new_state)
 
     def _run_loop(self) -> None:
-        last_wake_ts = 0.0
+        # Monotonic deadline before which the wake word is ignored. Covers the
+        # post-wake cooldown and a longer quiet period after Alpha replies so
+        # her own voice echo / room chatter cannot re-trigger her.
+        cooldown_until = 0.0
+        prev_wake_above = False
         try:
             with sd.RawInputStream(
                 samplerate=self.settings.sample_rate,
@@ -264,9 +293,12 @@ class VoiceAssistantRuntime:
                     )
 
                     now = time.monotonic()
-                    can_wake = now - last_wake_ts > self.settings.wake_cooldown_seconds
-                    if score_value >= self.settings.wake_threshold and can_wake:
-                        last_wake_ts = now
+                    above = score_value >= self.settings.wake_threshold
+                    # Require two consecutive above-threshold chunks: a single
+                    # spurious spike must never wake the assistant.
+                    if above and prev_wake_above and now >= cooldown_until:
+                        cooldown_until = now + self.settings.wake_cooldown_seconds
+                        prev_wake_above = False
                         frames = self._capture_utterance(stream, bytes(chunk))
                         transcript = self._transcribe(frames)
                         if transcript:
@@ -275,8 +307,16 @@ class VoiceAssistantRuntime:
                                 # Discard buffered audio (incl. TTS echo) so the
                                 # assistant does not listen to its own voice.
                                 self._drain_audio(stream, self.settings.post_reply_flush_seconds)
+                                # Stay quiet after replying: keep the wake word
+                                # ignored while the room settles / people chat.
+                                cooldown_until = max(
+                                    cooldown_until,
+                                    time.monotonic() + self.settings.post_reply_quiet_seconds,
+                                )
                             except Exception as exc:
                                 self._set_state(AssistantState.error, last_error=f"Processing error: {exc}")
+                    else:
+                        prev_wake_above = above
         except Exception as exc:
             self._set_state(AssistantState.error, running=False, last_error=str(exc))
 
@@ -486,7 +526,15 @@ class VoiceAssistantRuntime:
         if not text.strip():
             return
 
-        piper_bin_path = shutil.which(self.settings.piper_bin)
+        # Prefer a direct file match (covers absolute and backend-relative
+        # paths) before falling back to PATH lookup for a bare command name.
+        piper_bin_path = None
+        if self.settings.piper_bin:
+            candidate = Path(self.settings.piper_bin)
+            if candidate.is_file():
+                piper_bin_path = str(candidate)
+            else:
+                piper_bin_path = shutil.which(self.settings.piper_bin)
         if piper_bin_path is None:
             self._speak_with_espeak(text)
             return

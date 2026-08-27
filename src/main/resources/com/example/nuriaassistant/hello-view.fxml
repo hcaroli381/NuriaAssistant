@@ -619,6 +619,13 @@
         </VBox>
     </AnchorPane>
 
+    <!-- Night Dim Overlay (topmost: screen-saver dim while idle at night; tap to wake) -->
+    <AnchorPane fx:id="dimLayer"
+                visible="false" opacity="0.0"
+                styleClass="dim-overlay"
+                AnchorPane.topAnchor="0.0" AnchorPane.bottomAnchor="0.0"
+                AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0"/>
+
     <!-- Alarm Ring Overlay (Topmost layer when an alarm fires) -->
     <AnchorPane fx:id="alarmRingLayer"
                 visible="false" opacity="0.0"
