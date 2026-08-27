@@ -33,14 +33,16 @@ public record CalendarEvent(String title, LocalDateTime start, LocalDateTime end
         return false;
     }
 
+    private static final java.time.format.DateTimeFormatter TIME_FORMAT =
+            java.time.format.DateTimeFormatter.ofPattern("HH:mm");
+
     public String displayTime() {
         if (allDay) {
             return "Todo el día";
         }
-        java.time.format.DateTimeFormatter fmt = java.time.format.DateTimeFormatter.ofPattern("HH:mm");
         if (end == null) {
-            return start.format(fmt);
+            return start.format(TIME_FORMAT);
         }
-        return start.format(fmt) + " – " + end.format(fmt);
+        return start.format(TIME_FORMAT) + " – " + end.format(TIME_FORMAT);
     }
 }

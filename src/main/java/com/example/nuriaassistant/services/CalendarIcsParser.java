@@ -32,6 +32,10 @@ public final class CalendarIcsParser {
     private static final int MAX_EVENTS = 2000;
     private static final int MAX_ITERATIONS_PER_RULE = 5000;
 
+    /** iCloud emits this exact compact format; compiled once, not per event. */
+    private static final DateTimeFormatter ICS_DATETIME =
+            DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss");
+
     private CalendarIcsParser() {
     }
 
@@ -353,12 +357,10 @@ public final class CalendarIcsParser {
     private static LocalDateTime parseIcsDateTime(String value) throws DateTimeParseException {
         if (value.endsWith("Z")) {
             LocalDateTime utc = LocalDateTime.parse(
-                    value.substring(0, value.length() - 1),
-                    DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss"));
+                    value.substring(0, value.length() - 1), ICS_DATETIME);
             return utc.atZone(ZoneId.of("UTC")).toLocalDateTime();
         }
-        return LocalDateTime.parse(value.substring(0, Math.min(15, value.length())),
-                DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss"));
+        return LocalDateTime.parse(value.substring(0, Math.min(15, value.length())), ICS_DATETIME);
     }
 
     private static int parsePositiveInt(String raw, int fallback) {
