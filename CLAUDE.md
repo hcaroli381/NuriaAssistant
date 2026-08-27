@@ -117,6 +117,7 @@ The Pi has no browser or keyboard, so authorization happens on her phone:
   ```bash
   ./mvnw test
   ```
+- **Pi-like local runs:** `deploy/pi-sim.sh` (see note below).
 - **Raspberry Pi jar (build on PC, copy to Pi):** The `pi` Maven profile pins JavaFX to 21 GA + `linux-aarch64` natives inside the shaded fat jar (`maven-shade-plugin`, Main-Class already set). Both flags are required — profile properties do not propagate into transitive pom interpolation:
   ```bash
   ./mvnw clean package -Ppi -Djavafx.platform=linux-aarch64 -DskipTests
@@ -125,6 +126,8 @@ The Pi has no browser or keyboard, so authorization happens on her phone:
   ssh pi@<PI_IP> 'JDK_JAVA_OPTIONS="-Xms64m -Xmx384m -XX:+UseSerialGC -XX:TieredStopAtLevel=1" java -jar NuriaAssistant-1.0-SNAPSHOT-all.jar'
   ```
   Never use `-Ppi` for local dev/`javafx:run` — it bundles ARM natives that won't load on x86.
+
+- **Emulate Pi performance locally (before the hardware arrives):** QEMU ARM emulation only proves the code *runs* on ARM (it is slower than the Pi, so useless for speed). The practical approach is constraint simulation — `deploy/pi-sim.sh` pins the JVM to two logical CPUs (`taskset`), caps the heap to the deployed `-Xmx384m` profile, forces the software rendering pipeline (`-Dprism.forceSw=true`) and uses the C1-only + serial-GC flags. It reproduces the Pi's *feel* (slow layout, GC pressure, janky fades) without needing the hardware:
 
   **Pi 3 recommended JVM flags** (already wired into `deploy/nuria-assistant.service` via `JDK_JAVA_OPTIONS`): `-Xms64m -Xmx384m` caps the heap on the 1 GB box, `-XX:+UseSerialGC` uses the lowest-overhead single-threaded collector at that heap size, and `-XX:TieredStopAtLevel=1` skips the C2 JIT entirely — far less compilation on the slow ARM cores and faster startup, at no cost for an event-driven UI.
 

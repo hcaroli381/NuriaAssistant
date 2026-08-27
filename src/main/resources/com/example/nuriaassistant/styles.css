@@ -34,7 +34,10 @@
     -fx-font-size: 96px;
     -fx-font-weight: 800;
     -fx-text-fill: #ffffff;
-    -fx-effect: dropshadow(gaussian, rgba(2, 8, 20, 0.55), 14, 0, 0, 5);
+    /* No dropshadow on purpose: the clock repaints every second; the shadow is
+       the dominant per-tick cost in software rendering (Raspberry Pi). Removing
+       it is the single biggest idle-CPU savings, at a barely-perceptible visual
+       cost on the dark navy background. */
 }
 
 .minimal-date {

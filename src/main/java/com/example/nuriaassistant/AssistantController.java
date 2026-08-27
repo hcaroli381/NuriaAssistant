@@ -428,6 +428,11 @@ public class AssistantController {
     public void initialize() {
         ConfigLoader configLoader = new ConfigLoader();
 
+        // Extracted UI controllers first: updateTime() runs during this same
+        // method (clock tick + alarm check), so they must exist before then.
+        nightDimming = new NightDimmingController(dimLayer, configLoader);
+        notificationBubbleUi = new NotificationBubbleUi(notificationBanner, notificationLabel, notificationAvatarGlow);
+
         // Raster-cache the animated overlays once: transform/opacity animations
         // then run on cached textures instead of re-rasterizing every pulse.
         // Only nodes whose OWN transform/opacity animates are cached — parents
@@ -508,10 +513,8 @@ public class AssistantController {
             Log.error("Controller", "Failed to start notification server: " + e.getMessage());
         }
 
-        // 3b. Night dimming + speech bubble: extracted UI controllers own their
-        //     overlays; the controller just feeds them clock ticks and touches.
-        nightDimming = new NightDimmingController(dimLayer, configLoader);
-        notificationBubbleUi = new NotificationBubbleUi(notificationBanner, notificationLabel, notificationAvatarGlow);
+        // 3b. Night dimming: the controller feeds the overlay clock ticks and
+        //     touches via the root pane's event filters.
         rootPane.addEventFilter(MouseEvent.MOUSE_PRESSED, e -> nightDimming.touchActivity());
         rootPane.addEventFilter(MouseEvent.MOUSE_DRAGGED, e -> nightDimming.touchActivity());
         rootPane.addEventFilter(MouseEvent.MOUSE_MOVED, e -> nightDimming.touchActivity());
@@ -604,7 +607,9 @@ public class AssistantController {
         }
 
         checkAlarms(now);
-        nightDimming.checkDimming(now);
+        if (nightDimming != null) {
+            nightDimming.checkDimming(now);
+        }
         if (now.getMinute() != lastAlarmHintMinute) {
             lastAlarmHintMinute = now.getMinute();
             refreshNextAlarmHint();

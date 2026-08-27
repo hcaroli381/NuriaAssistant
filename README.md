@@ -160,3 +160,10 @@ work runs off the FX animation clock, scene-graph writes are
 change-deduplicated (label layout is expensive), animated overlays are cached,
 and the wake-word inference is energy-gated so idle CPU stays near zero. The
 full rules live in `CLAUDE.md` — do not regress them.
+
+**Testing without the hardware:** `deploy/pi-sim.sh` approximates the Pi's
+behaviour on a dev machine by pinning the JVM to two logical CPUs, capping the
+heap to the deployed `-Xmx384m` profile, forcing the software rendering
+pipeline and using the C1-only + serial-GC flags — a faithful *feel*
+simulation (QEMU ARM emulation is slower than the Pi, so it only proves the
+code runs on the architecture).
