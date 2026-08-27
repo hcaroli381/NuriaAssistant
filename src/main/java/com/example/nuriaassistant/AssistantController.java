@@ -793,6 +793,7 @@ public class AssistantController {
         // (the assistant itself keeps running and can still execute actions).
         cancelReplyLinger();
         hideVoiceCard(true);
+        stopOrbBreathing();
         voiceOverlayLayer.setVisible(false);
         closeCalendarScreen(true);
         closePhotoFrame(true);
@@ -1583,6 +1584,9 @@ public class AssistantController {
             // Spotify owns the overlay lifecycle while it is playing.
             if (!isCurrentlyShowingSpotify) {
                 voiceOverlayLayer.setVisible(true);
+                if ("IDLE".equals(voiceUiState)) {
+                    startOrbBreathing();
+                }
             }
         };
         if (instant) {
@@ -1598,6 +1602,7 @@ public class AssistantController {
     /** Reveals the frame over everything except notifications/alarms. */
     private void presentPhotoLayer() {
         closeCalendarScreen(true);
+        stopOrbBreathing();
         voiceOverlayLayer.setVisible(false);
         photoLayer.setOpacity(0.0);
         photoLayer.setVisible(true);
@@ -1988,10 +1993,10 @@ public class AssistantController {
         switch (voiceUiState) {
             case "IDLE" -> {
                 double score = Math.min(1.0, snapshot.wakeWordScore() / 0.6);
-                double opacity = 0.78 + 0.22 * score;
-                // Value-deduplicated: the poll arrives every second with a mostly
-                // stable score, and an unchanged opacity write still marks the
-                // cached orb dirty and forces a composite pass on the Pi.
+                // Quantize to 1% steps: the backend score jitters slightly every
+                // second, and an unquantized compare would write the cached orb's
+                // opacity (forcing a composite pass) on every single poll.
+                double opacity = Math.round((0.78 + 0.22 * score) * 100.0) / 100.0;
                 if (opacity != lastVoiceOrbOpacity) {
                     lastVoiceOrbOpacity = opacity;
                     voiceOrb.setOpacity(opacity);
@@ -2175,6 +2180,12 @@ public class AssistantController {
     }
 
     private void startOrbBreathing() {
+        // Never animate an invisible orb: the breathing timeline would keep
+        // pulsing the FX clock 24/7 while Spotify / the photo frame hide the
+        // voice overlay. Restart paths re-enter with the overlay visible.
+        if (voiceOverlayLayer == null || !voiceOverlayLayer.isVisible()) {
+            return;
+        }
         if (orbBreathing.getStatus() != Animation.Status.RUNNING) {
             orbBreathing.playFrom(Duration.ZERO);
         }

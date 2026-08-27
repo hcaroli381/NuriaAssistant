@@ -59,6 +59,10 @@ class Settings:
     pre_speech_timeout_seconds: float = _env_float("VOICE_PRE_SPEECH_TIMEOUT_SECONDS", 2.5)
     post_reply_flush_seconds: float = _env_float("VOICE_POST_REPLY_FLUSH_SECONDS", 0.8)
     wake_cooldown_seconds: float = _env_float("VOICE_WAKE_COOLDOWN_SECONDS", 2.5)
+    # Energy gate: skip the (expensive) ONNX wake-word inference on near-silent
+    # chunks. A silent chunk can never produce a wake match, and the Pi spends
+    # most of the day in a quiet room — this skips ~all inference while idle.
+    wake_min_rms: float = _env_float("VOICE_WAKE_MIN_RMS", 150.0)
     # Extra quiet time after Alpha finishes replying: the wake word stays
     # ignored so her own voice echo and surrounding chatter cannot re-trigger
     # her right after an answer.
@@ -285,12 +289,20 @@ class VoiceAssistantRuntime:
                         self._set_state(AssistantState.error, last_error="Audio overflow on input stream.")
                     audio_np = np.frombuffer(chunk, dtype=np.int16)
 
-                    score_name, score_value = self._wakeword_score(audio_np)
-                    self._set_state(
-                        AssistantState.idle,
-                        wake_word_score=score_value,
-                        wake_word_model=score_name,
-                    )
+                    # Energy gate: skip the ONNX inference on near-silent chunks
+                    # (the model cannot fire on silence). Speech/room noise
+                    # always passes the gate, so wake detection is unaffected.
+                    rms = (float(np.sqrt(np.mean(np.square(audio_np.astype(np.float32)))))
+                           if audio_np.size else 0.0)
+                    if rms >= self.settings.wake_min_rms:
+                        score_name, score_value = self._wakeword_score(audio_np)
+                        self._set_state(
+                            AssistantState.idle,
+                            wake_word_score=score_value,
+                            wake_word_model=score_name,
+                        )
+                    else:
+                        score_value = 0.0
 
                     now = time.monotonic()
                     above = score_value >= self.settings.wake_threshold
