@@ -51,6 +51,13 @@ public class SpotifyService {
     private final SpotifyTokenStore tokenStore;
     private HttpServer authCallbackServer;
 
+    /**
+     * Redirect URI the current authorization code was requested with (null =
+     * the client's configured URI). Written on the FX thread when the QR is
+     * regenerated, read by the callback server thread during the exchange.
+     */
+    private volatile String codeRedirectUri;
+
     public SpotifyService(String clientId, String clientSecret, String redirectUri) {
         this(clientId, clientSecret, redirectUri, new SpotifyTokenStore());
     }
@@ -121,8 +128,22 @@ public class SpotifyService {
             builder.state(state);
         }
 
+        // Spotify issues the code for one specific redirect URI and rejects the
+        // exchange unless the two match exactly, so remember which one this code
+        // belongs to instead of trusting the client's configured (loopback) URI.
+        codeRedirectUri = (redirectUri != null && !redirectUri.isBlank()) ? redirectUri : null;
+
         URI uri = builder.build().execute();
         return uri.toString();
+    }
+
+    /**
+     * Redirect URI the next code exchange will send: whatever the last authorize
+     * URL was built with, or {@code null} to use the client's configured URI.
+     * Exposed so the invariant can be asserted without a network round trip.
+     */
+    public String redirectUriForCodeExchange() {
+        return codeRedirectUri;
     }
 
     /** One OAuth callback: the code Spotify issued, plus the state we sent. */
@@ -247,10 +268,26 @@ public class SpotifyService {
      * @param authorizationCode Code received from Spotify OAuth redirect.
      * @return True if tokens were successfully obtained and saved, false otherwise.
      */
+    /**
+     * Builds the token exchange for a code, redeeming it against the redirect
+     * URI the code was issued for. Split out from the exchange itself so the
+     * value that goes on the wire can be asserted without a network round trip:
+     * a mismatch here fails the whole QR login, silently.
+     */
+    AuthorizationCodeRequest buildCodeExchange(String authorizationCode) {
+        AuthorizationCodeRequest.Builder builder = spotifyApi.authorizationCode(authorizationCode);
+        if (codeRedirectUri != null) {
+            builder.redirect_uri(URI.create(codeRedirectUri));
+        }
+        return builder.build();
+    }
+
     public boolean exchangeCodeForTokens(String authorizationCode) {
         try {
-            AuthorizationCodeRequest authorizationCodeRequest =
-                    spotifyApi.authorizationCode(authorizationCode).build();
+            if (codeRedirectUri != null) {
+                Log.info("Spotify", "Exchanging authorization code against redirect URI " + codeRedirectUri);
+            }
+            AuthorizationCodeRequest authorizationCodeRequest = buildCodeExchange(authorizationCode);
 
             AuthorizationCodeCredentials credentials = authorizationCodeRequest.execute();
 

@@ -1,6 +1,7 @@
 package com.example.nuriaassistant.spotify;
 
 import com.example.nuriaassistant.models.SpotifyTrackData;
+import org.apache.hc.core5.http.NameValuePair;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import se.michaelthelin.spotify.model_objects.miscellaneous.CurrentlyPlaying;
@@ -10,10 +11,13 @@ import se.michaelthelin.spotify.model_objects.specification.Episode;
 import se.michaelthelin.spotify.model_objects.specification.Image;
 import se.michaelthelin.spotify.model_objects.specification.ShowSimplified;
 import se.michaelthelin.spotify.model_objects.specification.Track;
+import se.michaelthelin.spotify.requests.authorization.authorization_code.AuthorizationCodeRequest;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -166,6 +170,57 @@ public class SpotifyServiceTest {
         assertTrue(url.contains("redirect_uri=" + URLEncoder.encode(relay, StandardCharsets.UTF_8)), url);
         assertTrue(url.contains("state=" + state), url);
         assertFalse(url.contains("127.0.0.1"), "the loopback URI must not leak into the phone flow: " + url);
+    }
+
+    /**
+     * Spotify ties the authorization code to the redirect URI it was issued for
+     * and rejects a mismatched exchange, so the code must be redeemed against
+     * the very URI the QR authorized with — never the client's loopback default.
+     */
+    @Test
+    void testCodeExchangeReusesTheRedirectUriTheAuthorizationAskedFor() throws Exception {
+        String relay = "https://hcaroli381.github.io/NuriaAssistant/spotify-callback.html";
+
+        assertNull(spotifyService.redirectUriForCodeExchange(),
+                "an untouched service redeems against its configured URI");
+
+        spotifyService.getAuthorizationUri(relay, "tok~192.168.1.50~8888");
+        assertEquals(relay, spotifyService.redirectUriForCodeExchange());
+    }
+
+    @Test
+    void testLoopbackAuthorizationKeepsUsingTheConfiguredRedirectUri() throws Exception {
+        spotifyService.getAuthorizationUri();
+
+        assertNull(spotifyService.redirectUriForCodeExchange(),
+                "desktop flow must keep redeeming against SPOTIFY_REDIRECT_URI");
+    }
+
+    /** The wire payload, not just the remembered value. */
+    @Test
+    void testCodeExchangeBodyCarriesThePhoneFlowRedirectUri() throws Exception {
+        String relay = "https://hcaroli381.github.io/NuriaAssistant/spotify-callback.html";
+        spotifyService.getAuthorizationUri(relay, "tok~192.168.1.50~8888");
+
+        Map<String, String> body = bodyOf(spotifyService.buildCodeExchange("CODE42"));
+
+        assertEquals(relay, body.get("redirect_uri"));
+        assertEquals("CODE42", body.get("code"));
+        assertEquals("authorization_code", body.get("grant_type"));
+        assertFalse(body.get("redirect_uri").contains("127.0.0.1"),
+                "the loopback URI would break every phone login");
+    }
+
+    @Test
+    void testCodeExchangeBodyFallsBackToTheConfiguredRedirectUri() throws Exception {
+        Map<String, String> body = bodyOf(spotifyService.buildCodeExchange("CODE42"));
+
+        assertEquals("http://127.0.0.1:8888/callback", body.get("redirect_uri"));
+    }
+
+    private static Map<String, String> bodyOf(AuthorizationCodeRequest request) {
+        return request.getBodyParameters().stream()
+                .collect(Collectors.toMap(NameValuePair::getName, NameValuePair::getValue));
     }
 
     @Test

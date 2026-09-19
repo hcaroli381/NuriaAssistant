@@ -70,10 +70,12 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Main Controller for the Alpha Assistant application.
@@ -865,8 +867,12 @@ public class AssistantController {
      * Handles the OAuth callback, whether it arrives from the phone over the
      * LAN (QR flow) or from a desktop browser (loopback flow).
      *
-     * @return true when the code was accepted, so the phone's page can show the
-     *         confirmation; false when the state belongs to another attempt.
+     * <p>Blocks until Spotify answers the exchange, because the return value
+     * decides what the phone's page says.
+     *
+     * @return true only when tokens were stored, so the phone's page can show the
+     *         confirmation; false when the state belongs to another attempt or
+     *         Spotify rejected the code.
      */
     public boolean handleSpotifyCallback(SpotifyService.AuthCallback callback) {
         if (spotifyService == null || callback == null || !callback.hasCode()) {
@@ -877,27 +883,36 @@ public class AssistantController {
             return false;
         }
 
-        spotifyExecutor.submit(() -> {
-            boolean success = spotifyService.exchangeCodeForTokens(callback.code());
-            Platform.runLater(() -> {
-                if (success) {
-                    Log.info("Controller", "Spotify successfully authorized.");
-                    onSpotifyConnected();
-                } else {
-                    Log.error("Controller", "Spotify authorization failed.");
-                    if (spotifyAuthStatusLabel != null && spotifyAuthLayer.isVisible()) {
-                        spotifyAuthStatusLabel.setText("No se pudo conectar, escanea de nuevo");
-                        spotifyAuthStatusLabel.setStyle("-fx-text-fill: #f87a7a;");
-                    }
-                    // Regenerate the QR so a fresh authorization URL is shown
-                    refreshSpotifyQr();
-                }
-            });
-            if (success) {
+        // Wait for the exchange before answering the phone: its confirmation
+        // page is written from the return value, and a sheet of paper that says
+        // "conectado" while no token was stored is worse than an error.
+        boolean success = false;
+        try {
+            success = spotifyExecutor.submit(() -> spotifyService.exchangeCodeForTokens(callback.code()))
+                    .get(20, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } catch (TimeoutException | ExecutionException e) {
+            Log.error("Controller", "Spotify: code exchange did not complete: " + e.getMessage());
+        }
+
+        boolean accepted = success;
+        Platform.runLater(() -> {
+            if (accepted) {
+                Log.info("Controller", "Spotify successfully authorized.");
+                onSpotifyConnected();
                 pollCurrentlyPlaying();
+            } else {
+                Log.error("Controller", "Spotify authorization failed.");
+                if (spotifyAuthStatusLabel != null && spotifyAuthLayer.isVisible()) {
+                    spotifyAuthStatusLabel.setText("No se pudo conectar, escanea de nuevo");
+                    spotifyAuthStatusLabel.setStyle("-fx-text-fill: #f87a7a;");
+                }
+                // Regenerate the QR so a fresh authorization URL is shown
+                refreshSpotifyQr();
             }
         });
-        return true;
+        return accepted;
     }
 
     // =========================================================================
