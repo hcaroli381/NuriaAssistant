@@ -1,5 +1,7 @@
 package com.example.nuriaassistant;
 
+import com.example.nuriaassistant.ui.Fonts;
+
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
@@ -14,6 +16,10 @@ public class AssistantApplication extends Application {
 
     @Override
     public void start(Stage stage) throws IOException {
+        // Alpha's own typeface must be registered before the scene resolves
+        // styles.css, so every label picks it up on the first layout pass.
+        Fonts.load();
+
         FXMLLoader fxmlLoader = new FXMLLoader(AssistantApplication.class.getResource("hello-view.fxml"));
         Parent root = fxmlLoader.load();
         

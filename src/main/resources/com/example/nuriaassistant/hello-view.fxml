@@ -1,13 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
+<?import javafx.scene.Group?>
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.ScrollPane?>
 <?import javafx.scene.image.ImageView?>
 <?import javafx.scene.layout.AnchorPane?>
 <?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Pane?>
 <?import javafx.scene.layout.Region?>
 <?import javafx.scene.layout.StackPane?>
 <?import javafx.scene.layout.VBox?>
+<?import javafx.scene.shape.Circle?>
+<?import javafx.scene.shape.Line?>
+<?import javafx.scene.shape.Rectangle?>
 <?import javafx.scene.shape.SVGPath?>
 
 <AnchorPane fx:id="rootPane"
@@ -21,6 +26,37 @@
     <AnchorPane fx:id="homeLayer"
                 AnchorPane.topAnchor="0.0" AnchorPane.bottomAnchor="0.0"
                 AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0">
+
+        <!-- Alpha's sky: a hand-placed constellation that gives the empty half of
+             the screen a reason to exist. 15 tiny static shapes, drawn once. -->
+        <Group mouseTransparent="true">
+            <Line startX="612.0" startY="452.0" endX="668.0" endY="512.0" styleClass="star-line"/>
+            <Line startX="668.0" startY="512.0" endX="742.0" endY="468.0" styleClass="star-line"/>
+            <Line startX="742.0" startY="468.0" endX="806.0" endY="540.0" styleClass="star-line"/>
+            <Line startX="806.0" startY="540.0" endX="884.0" endY="494.0" styleClass="star-line"/>
+            <Line startX="884.0" startY="494.0" endX="938.0" endY="560.0" styleClass="star-line"/>
+            <Line startX="700.0" startY="392.0" endX="742.0" endY="468.0" styleClass="star-line"/>
+
+            <Circle centerX="700.0" centerY="392.0" radius="1.3" styleClass="star"/>
+            <Circle centerX="612.0" centerY="452.0" radius="1.6" styleClass="star"/>
+            <Circle centerX="668.0" centerY="512.0" radius="1.1" styleClass="star"/>
+            <Circle centerX="742.0" centerY="468.0" radius="2.3" styleClass="star-iris"/>
+            <Circle centerX="806.0" centerY="540.0" radius="1.4" styleClass="star"/>
+            <Circle centerX="884.0" centerY="494.0" radius="1.9" styleClass="star"/>
+            <Circle centerX="938.0" centerY="560.0" radius="1.1" styleClass="star"/>
+            <Circle centerX="396.0" centerY="474.0" radius="1.5" styleClass="star"/>
+            <Circle centerX="318.0" centerY="534.0" radius="1.1" styleClass="star"/>
+            <Circle centerX="466.0" centerY="556.0" radius="1.3" styleClass="star"/>
+
+            <!-- One long ring: the orbit her stars sit on -->
+            <Circle centerX="786.0" centerY="500.0" radius="132.0" styleClass="star-ring"/>
+        </Group>
+
+        <!-- Dusk vignette: pulls the corners down so the middle of the screen breathes -->
+        <Region mouseTransparent="true"
+                styleClass="home-vignette"
+                AnchorPane.topAnchor="0.0" AnchorPane.bottomAnchor="0.0"
+                AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0"/>
 
         <!-- Top-Left Main Info Block: Time, Date, Weather & Temperature -->
         <VBox alignment="TOP_LEFT" spacing="6.0"
@@ -39,9 +75,9 @@
 
             <!-- 3. Weather & Temperature Row (Integrated right under date) -->
             <HBox alignment="CENTER_LEFT" spacing="12.0" styleClass="minimal-weather-row">
-                <Label fx:id="weatherIconLabel"
-                       text="☀️"
-                       styleClass="minimal-weather-icon"/>
+                <!-- Conditions glyph, built from shapes by WeatherUi (no emoji) -->
+                <StackPane fx:id="weatherIconBox"
+                           prefWidth="30.0" prefHeight="30.0"/>
 
                 <Label fx:id="weatherTempLabel"
                        text="--°C"
@@ -62,9 +98,12 @@
 
             <!-- 4. Next Alarm Hint (subtle, under weather row) -->
             <HBox fx:id="nextAlarmRow" visible="false"
-                  alignment="CENTER_LEFT" spacing="8.0">
-                <Label text="&#9200;"
-                       styleClass="next-alarm-icon"/>
+                  alignment="CENTER_LEFT" spacing="9.0">
+                <Pane prefWidth="17.0" prefHeight="17.0" mouseTransparent="true">
+                    <Circle centerX="8.5" centerY="9.5" radius="5.3" styleClass="icon-line icon-line-ember"/>
+                    <Line startX="8.5" startY="9.5" endX="8.5" endY="6.4" styleClass="icon-line icon-line-ember"/>
+                    <Line startX="8.5" startY="9.5" endX="10.9" endY="10.9" styleClass="icon-line icon-line-ember"/>
+                </Pane>
                 <Label fx:id="nextAlarmLabel"
                        text=""
                        styleClass="next-alarm-text"/>
@@ -72,14 +111,35 @@
 
             <!-- 5. Next Calendar Event Hint (subtle, same family) -->
             <HBox fx:id="nextEventRow" visible="false"
-                  alignment="CENTER_LEFT" spacing="8.0">
-                <Label text="&#128197;"
-                       styleClass="next-alarm-icon"/>
+                  alignment="CENTER_LEFT" spacing="9.0">
+                <Pane prefWidth="17.0" prefHeight="17.0" mouseTransparent="true">
+                    <Rectangle x="1.4" y="3.2" width="14.2" height="12.4" arcWidth="4.0" arcHeight="4.0"
+                               styleClass="icon-line icon-line-iris"/>
+                    <Line startX="1.4" startY="7.0" endX="15.6" endY="7.0" styleClass="icon-line icon-line-iris"/>
+                    <Line startX="5.0" startY="1.4" endX="5.0" endY="4.4" styleClass="icon-line icon-line-iris"/>
+                    <Line startX="12.0" startY="1.4" endX="12.0" endY="4.4" styleClass="icon-line icon-line-iris"/>
+                </Pane>
                 <Label fx:id="nextEventLabel"
                        text=""
                        styleClass="next-event-text"/>
             </HBox>
         </VBox>
+
+        <!-- Alpha signs the home screen: her mark and her name, bottom-left -->
+        <HBox alignment="CENTER_LEFT" spacing="13.0"
+              mouseTransparent="true"
+              AnchorPane.bottomAnchor="24.0"
+              AnchorPane.leftAnchor="48.0">
+            <StackPane>
+                <Circle radius="13.0" styleClass="alpha-mark-halo"/>
+                <Circle radius="5.6" styleClass="alpha-mark-core"/>
+                <Circle radius="2.0" styleClass="alpha-mark-dot"/>
+            </StackPane>
+            <VBox spacing="0.0" alignment="CENTER_LEFT">
+                <Label text="A L P H A" styleClass="alpha-wordmark"/>
+                <Label text="asistente de casa" styleClass="alpha-wordmark-sub"/>
+            </VBox>
+        </HBox>
     </AnchorPane>
 
     <!-- Spotify Full Screen Layer (Activated when Spotify is playing) -->
@@ -190,8 +250,13 @@
             <HBox alignment="CENTER"
                   styleClass="alarm-clock-button"
                   onMouseClicked="#openAlarmManager">
-                <SVGPath content="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"
-                         fill="#38bdf8" scaleX="1.5" scaleY="1.5"/>
+                <Pane prefWidth="26.0" prefHeight="26.0" scaleX="1.3" scaleY="1.3" mouseTransparent="true">
+                    <Circle centerX="13.0" centerY="14.2" radius="7.8" styleClass="icon-line icon-line-ember"/>
+                    <Line startX="13.0" startY="14.2" endX="13.0" endY="9.4" styleClass="icon-line icon-line-ember"/>
+                    <Line startX="13.0" startY="14.2" endX="16.6" endY="16.3" styleClass="icon-line icon-line-ember"/>
+                    <Line startX="5.4" startY="3.8" endX="9.2" endY="7.6" styleClass="icon-line icon-line-ember"/>
+                    <Line startX="20.6" startY="3.8" endX="16.8" endY="7.6" styleClass="icon-line icon-line-ember"/>
+                </Pane>
             </HBox>
 
             <!-- Spotify Link Entry (Spotify icon, opens QR login sheet) -->
@@ -207,8 +272,21 @@
                   styleClass="calendar-button"
                   onMouseClicked="#openCalendarScreen">
                 <StackPane>
-                    <SVGPath content="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zM9 14H7v-2h2v2zm4 0h-2v-2h2v2zm4 0h-2v-2h2v2zm-8 4H7v-2h2v2zm4 0h-2v-2h2v2zm4 0h-2v-2h2v2z"
-                             fill="#a855f7" scaleX="1.35" scaleY="1.35"/>
+                    <Pane prefWidth="26.0" prefHeight="26.0" scaleX="1.3" scaleY="1.3" mouseTransparent="true">
+                        <Rectangle x="2.2" y="4.4" width="21.6" height="18.6"
+                                   arcWidth="6.0" arcHeight="6.0"
+                                   styleClass="icon-line icon-line-iris"/>
+                        <Line startX="2.2" startY="9.8" endX="23.8" endY="9.8"
+                              styleClass="icon-line icon-line-iris"/>
+                        <Line startX="7.6" startY="1.8" endX="7.6" endY="6.4"
+                              styleClass="icon-line icon-line-iris"/>
+                        <Line startX="18.4" startY="1.8" endX="18.4" endY="6.4"
+                              styleClass="icon-line icon-line-iris"/>
+                        <Line startX="7.2" startY="13.6" endX="11.0" endY="13.6"
+                              styleClass="icon-line icon-line-iris"/>
+                        <Line startX="13.0" startY="13.6" endX="16.8" endY="13.6"
+                              styleClass="icon-line icon-line-iris"/>
+                    </Pane>
                     <Label fx:id="calendarBadgeLabel" visible="false"
                            text="0"
                            StackPane.alignment="TOP_RIGHT"
@@ -217,26 +295,19 @@
                 </StackPane>
             </HBox>
 
-            <!-- Photo Frame Entry (picture icon, opens the ambient slideshow) -->
-            <HBox alignment="CENTER"
-                  fx:id="photoFrameButton"
-                  styleClass="photo-frame-button"
-                  onMouseClicked="#openPhotoFrame">
-                <SVGPath content="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"
-                         fill="#38bdf8" scaleX="1.35" scaleY="1.35"/>
-            </HBox>
-
             <!-- Ambient Mic Orb / Mute Button (Collapsed state) -->
             <HBox fx:id="voiceOrb" alignment="CENTER" spacing="8.0"
                   styleClass="voice-orb"
                   onMouseClicked="#toggleVoiceMute">
                 <SVGPath fx:id="voiceMicIcon"
-                         content="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"
-                         fill="#38bdf8" scaleX="1.5" scaleY="1.5"/>
+                         content="M12 3.4c1.77 0 3.2 1.43 3.2 3.2v4.8c0 1.77-1.43 3.2-3.2 3.2s-3.2-1.43-3.2-3.2V6.6c0-1.77 1.43-3.2 3.2-3.2Z M7.6 13.2v1.8h8.8v-1.8 M12 15v4.6 M8.8 19.6h6.4"
+                         scaleX="1.3" scaleY="1.3"
+                         styleClass="mic-glyph"/>
                 <SVGPath fx:id="voiceMicOffIcon"
                          visible="false"
-                         content="M19 11h-1.7c0 .74-.16 1.43-.43 2.05l1.23 1.23c.56-.98.9-2.09.9-3.28zm-4.02.17c0-.06.02-.11.02-.17V5c0-1.66-1.34-3-3-3S9 3.34 9 5v.18l5.98 5.99zM4.27 3L3 4.27l6.01 6.01V11c0 1.66 1.33 3 2.99 3 .22 0 .44-.03.65-.08l1.66 1.66c-.71.33-1.5.52-2.31.52-2.76 0-5.3-2.1-5.3-5.1H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c.91-.13 1.77-.45 2.54-.9L19.73 21 21 19.73 4.27 3z"
-                         fill="#94a3b8" scaleX="1.5" scaleY="1.5"/>
+                         content="M12 3.4c1.77 0 3.2 1.43 3.2 3.2v4.8c0 1.77-1.43 3.2-3.2 3.2s-3.2-1.43-3.2-3.2V6.6c0-1.77 1.43-3.2 3.2-3.2Z M7.6 13.2v1.8h8.8v-1.8 M12 15v4.6 M8.8 19.6h6.4 M4.4 4.2 19.6 19.4"
+                         scaleX="1.3" scaleY="1.3"
+                         styleClass="mic-glyph mic-glyph-muted"/>
             </HBox>
         </HBox>
 
@@ -255,8 +326,9 @@
                 <!-- Status Row: Mic Icon + State Text + Thinking Dots -->
                 <HBox alignment="CENTER_LEFT" spacing="10.0">
                     <SVGPath fx:id="voiceCardMicIcon"
-                             content="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"
-                             fill="#22c55e"/>
+                             content="M12 3.4c1.77 0 3.2 1.43 3.2 3.2v4.8c0 1.77-1.43 3.2-3.2 3.2s-3.2-1.43-3.2-3.2V6.6c0-1.77 1.43-3.2 3.2-3.2Z M7.6 13.2v1.8h8.8v-1.8 M12 15v4.6 M8.8 19.6h6.4"
+                             scaleX="1.1" scaleY="1.1"
+                             styleClass="mic-glyph"/>
                     <Label fx:id="voiceStatusLabel"
                            text="Lista"
                            styleClass="voice-status-text"/>
@@ -286,7 +358,7 @@
                       alignment="CENTER_LEFT" spacing="2.0"
                       maxWidth="650.0"
                       styleClass="voice-bubble-alpha">
-                    <Label text="ALPHA" styleClass="voice-bubble-alpha-author"/>
+                    <Label text="A L P H A" styleClass="voice-bubble-alpha-author"/>
                     <Label fx:id="voiceReplyLabel"
                            text=""
                            wrapText="true"
@@ -316,9 +388,11 @@
                          fill="#1DB954" scaleX="1.4" scaleY="1.4"/>
                 <Label text="Vincular Spotify" styleClass="spotify-auth-title"/>
                 <Region HBox.hgrow="ALWAYS"/>
-                <Label text="&#10005;"
-                       onMouseClicked="#closeSpotifyAuth"
-                       styleClass="alarm-sheet-close"/>
+                <Label text="A L P H A" styleClass="alpha-wordmark"/>
+                <Pane onMouseClicked="#closeSpotifyAuth" styleClass="icon-button">
+                    <Line startX="12.0" startY="12.0" endX="22.0" endY="22.0" styleClass="icon-glyph"/>
+                    <Line startX="12.0" startY="22.0" endX="22.0" endY="12.0" styleClass="icon-glyph"/>
+                </Pane>
             </HBox>
 
             <!-- QR code (white panel for scanner contrast; rendered dynamically) -->
@@ -329,7 +403,7 @@
                            smooth="false"/>
             </StackPane>
 
-            <Label text="Escanea con la c&#225;mara del m&#243;vil y haz login con tu cuenta Spotify"
+            <Label text="1 &#183; Escanea el c&#243;digo con la c&#225;mara del m&#243;vil&#10;2 &#183; Entra en tu Spotify: esta pantalla se conecta sola"
                    wrapText="true" textAlignment="CENTER"
                    styleClass="spotify-auth-hint"/>
 
@@ -364,9 +438,10 @@
                 <Label text="&#8250;" onMouseClicked="#showNextMonth"
                        styleClass="calendar-nav-button"/>
                 <Region HBox.hgrow="ALWAYS"/>
-                <Label text="&#10005;"
-                       onMouseClicked="#closeCalendarScreen"
-                       styleClass="alarm-sheet-close"/>
+                <Pane onMouseClicked="#closeCalendarScreen" styleClass="icon-button">
+                    <Line startX="12.0" startY="12.0" endX="22.0" endY="22.0" styleClass="icon-glyph"/>
+                    <Line startX="12.0" startY="22.0" endX="22.0" endY="12.0" styleClass="icon-glyph"/>
+                </Pane>
             </HBox>
 
             <!-- Body: month grid (left) + selected-day events (right) -->
@@ -374,7 +449,7 @@
 
                 <VBox spacing="6.0">
                     <!-- Weekday header: L M X J V S D -->
-                    <HBox fx:id="calendarWeekdayRow" spacing="6.0">
+                    <HBox spacing="6.0">
                         <Label text="L" minWidth="82.0" alignment="CENTER" styleClass="calendar-weekday"/>
                         <Label text="M" minWidth="82.0" alignment="CENTER" styleClass="calendar-weekday"/>
                         <Label text="X" minWidth="82.0" alignment="CENTER" styleClass="calendar-weekday"/>
@@ -392,7 +467,7 @@
                     <Label fx:id="calendarSelectedDateLabel" text=""
                            wrapText="true"
                            styleClass="calendar-selected-date"/>
-                    <ScrollPane fx:id="calendarEventScroll"
+                    <ScrollPane
                                 fitToWidth="true"
                                 hbarPolicy="NEVER"
                                 vbarPolicy="AS_NEEDED"
@@ -405,55 +480,8 @@
         </VBox>
     </AnchorPane>
 
-    <!-- Photo Frame (Full-screen slideshow: crossfades through ~/.alpha/photos) -->
-    <AnchorPane fx:id="photoLayer"
-                visible="false" opacity="0.0"
-                styleClass="photo-frame-layer"
-                AnchorPane.topAnchor="0.0" AnchorPane.bottomAnchor="0.0"
-                AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0">
-
-        <!-- Stacked ImageViews for jank-free opacity-only crossfades -->
-        <StackPane AnchorPane.topAnchor="0.0" AnchorPane.bottomAnchor="0.0"
-                   AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0">
-            <ImageView fx:id="photoViewA"
-                       fitWidth="1024.0" fitHeight="600.0"
-                       preserveRatio="true" smooth="true"/>
-            <ImageView fx:id="photoViewB"
-                       fitWidth="1024.0" fitHeight="600.0"
-                       preserveRatio="true" smooth="true"/>
-        </StackPane>
-
-        <!-- Touch navigation: left half = previous, right half = next -->
-        <Region fx:id="photoPrevZone"
-                onMouseClicked="#showPreviousPhoto"
-                styleClass="photo-nav-zone"
-                AnchorPane.topAnchor="0.0" AnchorPane.bottomAnchor="0.0"
-                AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="512.0"/>
-        <Region fx:id="photoNextZone"
-                onMouseClicked="#showNextPhoto"
-                styleClass="photo-nav-zone"
-                AnchorPane.topAnchor="0.0" AnchorPane.bottomAnchor="0.0"
-                AnchorPane.leftAnchor="512.0" AnchorPane.rightAnchor="90.0"/>
-
-        <!-- Bottom status chip: position in the library -->
-        <HBox alignment="CENTER"
-              AnchorPane.bottomAnchor="18.0"
-              AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0">
-            <Label fx:id="photoCounterLabel"
-                   text=""
-                   styleClass="photo-counter"/>
-        </HBox>
-
-        <!-- Close button (above the nav zones) -->
-        <Label text="&#10005;"
-               onMouseClicked="#closePhotoFrame"
-               styleClass="photo-close-btn"
-               AnchorPane.topAnchor="22.0"
-               AnchorPane.rightAnchor="26.0"/>
-    </AnchorPane>
-
     <!-- Alpha Speech Bubble (Topmost transient alert; Alpha "says" remote messages) -->
-    <VBox fx:id="notificationBubbleWrap"
+    <VBox
           alignment="CENTER" spacing="0"
           AnchorPane.bottomAnchor="24.0"
           AnchorPane.leftAnchor="48.0"
@@ -466,19 +494,31 @@
               styleClass="notification-bubble">
 
             <!-- Avatar: pulsing aurora glow behind a gradient ring with robot face -->
-            <StackPane fx:id="notificationAvatar"
-                       styleClass="notification-avatar"
+            <StackPane styleClass="notification-avatar"
                        minWidth="62.0" minHeight="62.0">
                 <Region fx:id="notificationAvatarGlow"
                         visible="false"
                         styleClass="notification-avatar-glow"/>
-                <SVGPath content="M4 15q-1.25 0 -2.12 -0.88 t -0.88 -2.12 q 0 -1.25 0.88 -2.12 t 2.12 -0.88 v -2 q 0 -0.83 0.59 -1.41 T 6 5 h 3 q 0 -1.25 0.88 -2.12 t 2.12 -0.88 q 1.25 0 2.12 0.88 t 0.88 2.12 h 3 q 0.83 0 1.41 0.59 T 20 7 v 2 q 1.25 0 2.12 0.88 t 0.88 2.12 q 0 1.25 -0.88 2.12 t -2.12 0.88 v 4 q 0 0.83 -0.59 1.41 T 18 21 H 6 q -0.83 0 -1.41 -0.59 T 4 19 v -4 Z m 6.06 -2.44 Q 10.5 12.12 10.5 11.5 t -0.44 -1.06 Q 9.62 10 9 10 t -1.06 0.44 Q 7.5 10.88 7.5 11.5 t 0.44 1.06 Q 8.38 13 9 13 t 1.06 -0.44 Z m 6 0 Q 16.5 12.12 16.5 11.5 t -0.44 -1.06 Q 15.62 10 15 10 t -1.06 0.44 Q 13.5 10.88 13.5 11.5 t 0.44 1.06 Q 14.38 13 15 13 t 1.06 -0.44 Z M 9 17 h 6 q 0.43 0 0.71 -0.29 T 16 16 q 0 -0.43 -0.29 -0.71 T 15 15 H 9 q -0.43 0 -0.71 0.29 T 8 16 q 0 0.43 0.29 0.71 T 9 17 Z"
-                         fill="#ffffff" scaleX="1.7" scaleY="1.7"/>
+                <!-- Her face, drawn from scratch: antenna, head, two eyes, a smile -->
+                <Group>
+                    <Circle centerX="31.0" centerY="15.4" radius="2.3" styleClass="alpha-face"/>
+                    <Line startX="31.0" startY="17.4" endX="31.0" endY="23.4" styleClass="alpha-face"/>
+                    <Rectangle x="16.0" y="23.0" width="30.0" height="24.0"
+                               arcWidth="10.0" arcHeight="10.0" styleClass="alpha-face"/>
+                    <Rectangle x="11.0" y="30.5" width="4.0" height="9.0"
+                               arcWidth="3.0" arcHeight="3.0" styleClass="alpha-face"/>
+                    <Rectangle x="47.0" y="30.5" width="4.0" height="9.0"
+                               arcWidth="3.0" arcHeight="3.0" styleClass="alpha-face"/>
+                    <Circle centerX="25.0" centerY="33.0" radius="2.6" styleClass="alpha-face-eye"/>
+                    <Circle centerX="37.0" centerY="33.0" radius="2.6" styleClass="alpha-face-eye"/>
+                    <SVGPath content="M25.4 40.4c1.8 2.3 9.4 2.3 11.2 0"
+                             styleClass="alpha-face-mouth"/>
+                </Group>
             </StackPane>
 
             <!-- Message content -->
             <VBox alignment="CENTER_LEFT" spacing="3.0" maxWidth="660.0">
-                <Label text="ALPHA"
+                <Label text="A L P H A"
                        styleClass="notification-author"/>
                 <Label fx:id="notificationLabel"
                        text=""
@@ -490,9 +530,10 @@
             <Region HBox.hgrow="ALWAYS"/>
 
             <!-- Touch Dismiss Button -->
-            <Label text="&#10005;"
-                   onMouseClicked="#dismissNotification"
-                   styleClass="notification-close-btn"/>
+            <Pane onMouseClicked="#dismissNotification" styleClass="icon-button">
+                <Line startX="12.0" startY="12.0" endX="22.0" endY="22.0" styleClass="icon-glyph"/>
+                <Line startX="12.0" startY="22.0" endX="22.0" endY="12.0" styleClass="icon-glyph"/>
+            </Pane>
         </HBox>
 
         <!-- Speech tail pointing down from the bubble -->
@@ -518,12 +559,19 @@
 
             <!-- Header -->
             <HBox alignment="CENTER_LEFT" spacing="12.0">
-                <Label text="&#9200;" styleClass="alarm-sheet-header-icon"/>
+                <Pane prefWidth="24.0" prefHeight="24.0" mouseTransparent="true">
+                    <Circle centerX="12.0" centerY="13.2" radius="7.2" styleClass="icon-line icon-line-ember"/>
+                    <Line startX="12.0" startY="13.2" endX="12.0" endY="8.8" styleClass="icon-line icon-line-ember"/>
+                    <Line startX="12.0" startY="13.2" endX="15.3" endY="15.1" styleClass="icon-line icon-line-ember"/>
+                    <Line startX="5.0" startY="3.6" endX="8.4" endY="7.0" styleClass="icon-line icon-line-ember"/>
+                    <Line startX="19.0" startY="3.6" endX="15.6" endY="7.0" styleClass="icon-line icon-line-ember"/>
+                </Pane>
                 <Label text="Alarmas" styleClass="alarm-sheet-title"/>
                 <Region/>
-                <Label text="&#10005;"
-                       onMouseClicked="#closeAlarmManager"
-                       styleClass="alarm-sheet-close"/>
+                <Pane onMouseClicked="#closeAlarmManager" styleClass="icon-button">
+                    <Line startX="12.0" startY="12.0" endX="22.0" endY="22.0" styleClass="icon-glyph"/>
+                    <Line startX="12.0" startY="22.0" endX="22.0" endY="12.0" styleClass="icon-glyph"/>
+                </Pane>
             </HBox>
 
             <!-- Alarm Rows (built dynamically) -->
@@ -644,9 +692,18 @@
               AnchorPane.topAnchor="0.0" AnchorPane.bottomAnchor="90.0"
               AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0">
 
-            <Label
-                   text="&#9200;"
-                   styleClass="alarm-ring-icon"/>
+            <!-- Her own alarm glyph instead of an emoji: same hand as every other icon -->
+            <Pane prefWidth="92.0" prefHeight="86.0" mouseTransparent="true">
+                <Circle centerX="46.0" centerY="50.0" radius="38.0" styleClass="alarm-ring-halo"/>
+                <Circle centerX="46.0" centerY="50.0" radius="27.0" styleClass="alarm-ring-glyph"/>
+                <Line startX="46.0" startY="50.0" endX="46.0" endY="32.0" styleClass="alarm-ring-glyph"/>
+                <Line startX="46.0" startY="50.0" endX="59.0" endY="56.5" styleClass="alarm-ring-glyph"/>
+                <Line startX="22.0" startY="14.0" endX="34.0" endY="26.0" styleClass="alarm-ring-glyph"/>
+                <Line startX="70.0" startY="14.0" endX="58.0" endY="26.0" styleClass="alarm-ring-glyph"/>
+            </Pane>
+            <Label fx:id="alarmRingGreetingLabel"
+                   text=""
+                   styleClass="alarm-ring-greeting"/>
             <Label fx:id="alarmRingTimeLabel"
                    text="--:--"
                    styleClass="alarm-ring-time"/>

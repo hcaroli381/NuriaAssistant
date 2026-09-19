@@ -11,11 +11,11 @@ The system operates as an "always-on" smart assistant (similar to an Echo Show) 
 
 1. **Main JavaFX Application (The Orchestrator):** Handles UI, clock, date display, weather widget, notifications, and Spotify playback view. Designed for 24/7 uptime.
 2. **Date & Time System (`ThemeManager`):**
-   - Displays real-time clock (`HH:mm:ss`) and the full date with day of the week and month (e.g. `Thursday, 20 August`).
+   - Displays real-time clock (`HH:mm:ss`) and the full date with day of the week and month, in Spanish (e.g. `Jueves, 20 de agosto` — `ThemeManager`, `Locale.of("es", "ES")`).
 3. **Spotify Connect Integration (`SpotifyService`):**
    - Displays full-screen player with album cover art, song title, artist, album, and playback device badge when playing.
    - Smooth animated Spotify logo transition when music starts playing.
-   - **QR login:** tokens persist at `~/.alpha/spotify-tokens.json`; without a stored session the app shows a full-screen QR that any phone camera can scan to authorize (see *Spotify QR Login*).
+   - **QR login:** tokens persist at `~/.alpha/spotify-tokens.json`; without a stored session the app shows a full-screen QR that any phone camera can scan to authorize (see *Spotify QR Login*). No LAN address, certificate or network setup is needed at the moment of the gift: the state parameter carries the Pi's address to a fixed HTTPS bounce page.
 4. **Backend Bridge & Remote Notification System (`NotificationServer`):**
    - Lightweight embedded HTTP server running on port `8080` (`POST /notify`).
    - Authenticated via header `X-API-KEY: nuria-assistant-secret-key`.
@@ -24,12 +24,13 @@ The system operates as an "always-on" smart assistant (similar to an Echo Show) 
    - Enables sending remote messages to the screen from Telegram on any phone/PC from anywhere in the world.
    - Long-polling daemon using standard Java HTTP Client (zero heavy dependencies, negligible RAM footprint).
    - Sends confirmation reply back to the Telegram chat when the message is displayed on screen.
-6. **Weather Service (`WeatherService`):**
+6. **Weather Service (`WeatherService` + `ui/WeatherUi`):**
    - Fetches current weather data from OpenWeatherMap API for the configured city.
+   - Conditions are drawn, not typed: `WeatherUi.iconFor` returns a glyph assembled from plain shapes (sun, cloud, rain, drizzle, storm, snow, thermometer fallback) coloured from `styles.css`. The controller only rebuilds it when the condition actually changes.
 8. **Alarm System (`AlarmService`, tactile only for now):**
    - Alarms persist as zero-dependency JSON at `~/.alpha/alarms.json` (atomic writes, survives reboots).
    - Checked every second from the existing clock tick; a 30-second fire window prevents skipped rings under load.
-   - Full-screen ring overlay (purple radial gradient + pulsing orange glow) with big time display and two large touch buttons: *Posponer 5 min* and *Apagar*.
+   - Full-screen ring overlay (purple radial gradient + pulsing orange glow) with Alpha's own alarm glyph, a greeting addressed to `OWNER_NAME` (*Buenos días, Nuria*), big time display and two large touch buttons: *Posponer 5 min* and *Apagar*.
    - Looping WAV chime (`sounds/alarm.wav`) via JavaFX `MediaPlayer` — no new dependencies.
    - Full-screen touch manager sheet (clock icon button next to the top-right mic orb): list sorted by time, ON/OFF toggle, delete ✕, tap row to edit, add with hour/minute steppers, *Solo una vez* / *Repetir* mode selector and L M X J V S D day chips (empty selection = daily).
    - Subtle next-alarm hint under the weather row ("Hoy 07:00", "07:00 en 12 min", "Posponer ...").
@@ -48,13 +49,6 @@ The system operates as an "always-on" smart assistant (similar to an Echo Show) 
     - The calendar icon carries a violet count badge: events starting within the next 7 days (refreshed once per minute and on every feed refresh).
     - Subtle next-event hint under the weather row ("Cita · Hoy 18:00", "Mañana 10:00") refreshed once per minute.
     - Privacy: anyone holding the share link can read the calendar — she should share a dedicated calendar, never her main one.
-11. **Photo Frame (`PhotoFrameService` + full-screen slideshow):**
-    - Send any photo (or image document) to the Telegram bot → it is stored at `~/.alpha/photos/` and displayed full-screen immediately; Alpha confirms with a speech bubble ("📸 Foto añadida al marco").
-    - Library is capped at 50 photos (oldest evicted, protects the SD card); plain timestamped filenames, no index JSON — directory scan yields chronological order.
-    - Full-screen frame opens via the sky-blue photo icon button (top-right row) or Telegram `/foto`; advances every 15 s with a slow crossfade.
-    - Touch navigation: left half = previous photo, right half = next, ✕ closes. Auto-closes instantly if music starts or an alarm rings (same rules as the calendar).
-    - Pi-3 performance: two stacked ImageViews crossfade via opacity only; images decode off-FX-thread (`backgroundLoading`) downscaled to 1024×600 (~2.4 MB per bitmap); the next slide is preloaded during display; at most two decoded photos live in RAM; replaced bitmaps are nulled immediately.
-
 ## Remote Messaging System (Telegram & HTTP API)
 
 ### 1. Sending messages via Telegram (From anywhere in the world)
@@ -92,16 +86,37 @@ print(response.text)
 
 ## Spotify QR Login (phone-based OAuth)
 
-The Pi has no browser or keyboard, so authorization happens on her phone:
+The Pi has no browser or keyboard, so authorization happens on her phone. Since
+April 2025 Spotify **rejects plain-`http` redirect URIs that are not loopback
+literals**, so a LAN address like `http://192.168.1.50:8888/callback` no longer
+works — the flow needs one fixed HTTPS URL that does not depend on the network:
+
+```
+phone ─ scan QR ─► accounts.spotify.com/authorize
+                     redirect_uri = SPOTIFY_RELAY_URL   (HTTPS, whitelisted once)
+                     state        = <token>~<PI_LAN_IP>~8888
+                         │
+                         ▼
+   https://<you>.github.io/NuriaAssistant/spotify-callback.html
+     reads the Pi's address out of `state`, then navigates the phone to
+                         │
+                         ▼
+   http://<PI_LAN_IP>:8888/callback?code=…&state=…   (Pi, over the LAN)
+```
 
 1. On startup (or via the green Spotify icon button next to the alarm clock button), if no valid session exists the app shows a full-screen sheet with a **QR code encoding the OAuth authorize URL** (`SpotifyQrGenerator`, ZXing core — pure Java).
 2. She scans it with the iPhone camera → the Spotify accounts page opens in the phone browser → she logs in with her account.
-3. Spotify redirects to `SPOTIFY_REDIRECT_URI`; the embedded callback server (port `8888`, bound to `0.0.0.0`) receives the code, exchanges it for tokens and stores them.
-4. The sheet closes itself and Alpha confirms with a speech bubble ("✅ Spotify conectado").
+3. Spotify redirects the phone to the static bounce page (`docs/spotify-callback.html`, served by GitHub Pages — no server component, no stored state), which navigates it to the Pi.
+4. The embedded callback server (port `8888`, bound to `0.0.0.0`) verifies the state token, exchanges the code for tokens, stores them and answers with an Alpha-branded confirmation page.
+5. The sheet closes itself and Alpha confirms with a speech bubble ("✅ Spotify conectado").
 
-- **Critical:** for phone-based login the redirect URI must be the Pi's LAN address, e.g. `http://192.168.1.50:8888/callback` — `127.0.0.1` would send the phone's browser back to the phone. Add that exact URI in the Spotify Developer Dashboard "Redirect URIs" list.
+- **One-time provisioning:** enable GitHub Pages on this repo (`Settings → Pages → Deploy from branch → main /docs`), whitelist the resulting URL (`https://<you>.github.io/NuriaAssistant/spotify-callback.html`) under **Redirect URIs** in the Spotify Developer Dashboard, and put the same URL in `SPOTIFY_RELAY_URL`. Nothing else is required — no LAN address to update, no per-network config.
+- The bounce page only ever navigates to a private address: `state` is validated against an IPv4/`.local` pattern, so a crafted link cannot redirect someone anywhere else.
+- `SPOTIFY_RELAY_URL` may be empty: without it the app falls back to the loopback `SPOTIFY_REDIRECT_URI` (`http://127.0.0.1:8888/callback`), which still works for desktop development but not from a phone.
 - Tokens persist at `~/.alpha/spotify-tokens.json` (`accessToken` / `refreshToken` / `expiresAtEpochMs`, atomic writes). On every boot the app silently refreshes the access token; only a revoked/expired refresh token clears the store and brings the QR back.
 - A rejected code regenerates the QR automatically; failures set the status label red without leaving the sheet.
+- **If a phone flow dies halfway** (e.g. the phone is on mobile data instead of the home Wi-Fi) the callback page explains it and the QR can simply be re-scanned; the app also accepts the previous state token, so closing and reopening the sheet does not invalidate an authorization already in progress.
+- Diagnostics: the console prints `Spotify Auth URL: …` (including the encoded state) and `Spotify phone pairing via …` at startup.
 
 ## Build and Run
 
@@ -136,10 +151,14 @@ The Pi has no browser or keyboard, so authorization happens on her phone:
 - **Screen Resolution:** Exactly 1024x600 pixels (Raspberry Pi 3 touchscreen).
 - **Layout:** Minimalist top-left information stack:
   1. Clock: Large, high-contrast pure white (`#ffffff`, `96px` bold).
-  2. Date: Day of week, day, month in vivid sky blue (`#38bdf8`, `28px` bold).
-  3. Weather row: Icon + Temperature (`#ffffff`) + Description (`#e2e8f0`) + City (`#94a3b8`).
-- **Background:** Deep Navy Blue ambient radial gradient (`#132a4a` -> `#0a192f` -> `#050d18`).
-- **Notification Banner:** Alpha speech bubble — glassmorphic navy card with violet border, robot avatar with pulsing aura, speech tail, `ALPHA` author tag (`styles.css` `.notification-bubble` family).
+  2. Date: Day of week, day, month in Alpha's aurora blue (`#6fc7ef`, `28px` bold) — Spanish (`Jueves, 20 de agosto`), never English.
+  3. Weather row: conditions glyph (`ui/WeatherUi`, shapes on a 24px grid — no emoji, which rendered differently on every machine) + Temperature (`#ffffff`) + Description (`#dbe6f5`) + City (`#93a8c4`).
+  4. Subtle hints (next alarm / next event) with the same hand-drawn glyph family instead of emoji.
+- **Background — "Aurora Dusk":** Deep navy radial gradient (`#142a49` -> `#08152a` -> `#040b16`) plus Alpha's sky — a hand-placed constellation (`.star*`), a dusk vignette (`.home-vignette`) and her signature mark bottom-left (`.alpha-mark-*`, `.alpha-wordmark`). All of it is static shapes: no animation, rasterised once.
+- **Palette (hand-mixed, do NOT go back to framework defaults):** ink `#040b16` / `#08152a` / `#0d1f3a` / `#142a49`, aurora `#6fc7ef` (dim `#a9dff6`), iris `#a98bf5` (deep `#7c5cf0`), mint `#63d6a4`, ember `#f0b25e`, rose `#f87a7a`, text `#ffffff` / `#dbe6f5` / `#93a8c4` / `#6b7f9c`. The previous values were Tailwind's slate/sky/violet set verbatim, which is exactly what made the UI read as machine-generated — keep new work inside this palette.
+- **Type:** one bundled family, **Space Grotesk** (SIL OFL, `resources/.../fonts/`, loaded by `ui/Fonts.java` before the scene is built, referenced as `-fx-font-family: "Space Grotesk"`). Never rely on system font stacks again.
+- **Icons:** Alpha has one hand. Every glyph is assembled from plain shapes (`Circle`/`Line`/`Rectangle`, optionally a stroke-only `SVGPath`) and styled through `.icon-line` / `.icon-glyph` / `.mic-glyph` — one 1.7px weight on a 24px grid. No Material/Zxing/emoji glyphs in the chrome, and **no `-fx-letter-spacing`** (JavaFX has no such property; tracked-out labels are written spaced by hand, e.g. `A L P H A`).
+- **Notification Banner:** Alpha's speech bubble — glassmorphic navy card with iris border, her hand-drawn face (`.alpha-face*`), pulsing aura, speech tail, spaced `A L P H A` author tag (`styles.css` `.notification-bubble` family).
 
 ## Key Files
 
@@ -151,6 +170,10 @@ The Pi has no browser or keyboard, so authorization happens on her phone:
 - `src/main/java/com/example/nuriaassistant/spotify/SpotifyService.java`: Spotify Web API & OAuth2 integration.
 - `src/main/java/com/example/nuriaassistant/spotify/SpotifyTokenStore.java`: Token persistence (`~/.alpha/spotify-tokens.json`, atomic writes).
 - `src/main/java/com/example/nuriaassistant/spotify/SpotifyQrGenerator.java`: ZXing wrapper that encodes the authorize URL as a QR BitMatrix.
+- `src/main/java/com/example/nuriaassistant/spotify/SpotifyPairing.java`: OAuth `state` encoding (`token~host~port`, parsed/validated), LAN IPv4 detection and the loopback/mDNS fallbacks.
+- `docs/spotify-callback.html`: static GitHub Pages bounce page — the single whitelisted HTTPS redirect URI; hands the code back to the Pi over the LAN.
+- `src/main/java/com/example/nuriaassistant/ui/Fonts.java` + `src/main/resources/.../fonts/`: Space Grotesk (OFL) faces bundled in the jar.
+- `src/main/java/com/example/nuriaassistant/ui/WeatherUi.java`: condition → shape-built glyph mapping for the home weather row.
 - `src/main/java/com/example/nuriaassistant/services/VoiceBackendLauncher.java`: Spawns the local Python voice backend (uvicorn child process) so the jar is self-contained.
 - `src/main/java/com/example/nuriaassistant/services/WeatherService.java`: OpenWeatherMap client.
 - `src/main/java/com/example/nuriaassistant/services/NotificationServer.java`: HTTP server for remote push notifications.
@@ -161,7 +184,6 @@ The Pi has no browser or keyboard, so authorization happens on her phone:
 - `src/main/java/com/example/nuriaassistant/models/CalendarEvent.java`: Single calendar occurrence (title, start, end, all-day).
 - `src/main/java/com/example/nuriaassistant/models/Alarm.java`: Alarm model (time, repeat days, snooze/fire state, due-window logic).
 - `src/main/java/com/example/nuriaassistant/services/AlarmService.java`: Alarm persistence (`~/.alpha/alarms.json`), due-checks and next-alarm summary.
-- `src/main/java/com/example/nuriaassistant/services/PhotoFrameService.java`: Photo-frame library at `~/.alpha/photos/` (timestamped files, 50-photo cap, atomic writes).
 - `src/main/resources/com/example/nuriaassistant/sounds/alarm.wav`: Looping ring chime.
 - `deploy/`: systemd units (`nuria-voice.service`, `nuria-assistant.service`) + `install.sh` for boot-on-power kiosk deployment.
 
@@ -194,7 +216,7 @@ The Pi has no browser or keyboard, so authorization happens on her phone:
 - **UI:** The JavaFX application displays track metadata (title, artist, cover art) by polling the Spotify API.
 - **Constraint:** Do not attempt full music control or search within the JavaFX UI. Use the Spotify mobile app/PC client as the primary controller.
 - **Authentication:** OAuth2 authorization-code flow with a QR login (see *Spotify QR Login*):
-  - Redirect URI: `http://127.0.0.1:8888/callback` for desktop dev; for phone-based QR login use the Pi's LAN address, e.g. `http://<PI_IP>:8888/callback` (must be whitelisted in the Spotify Developer Dashboard).
+  - Redirect URIs: `https://<you>.github.io/NuriaAssistant/spotify-callback.html` for the phone QR login (whitelisted in the Spotify Developer Dashboard; the Pi's LAN address rides inside OAuth `state`), and the loopback `http://127.0.0.1:8888/callback` for desktop development. Plain-`http` LAN addresses are rejected by Spotify.
   - Client ID and Client Secret can be configured in `config.properties` or environment variables.
   - Tokens persist at `~/.alpha/spotify-tokens.json` and are refreshed silently on every boot.
 
@@ -205,7 +227,9 @@ The Pi has no browser or keyboard, so authorization happens on her phone:
   - `OPENWEATHER_CITY`: City name (e.g., `Granada,ES`).
   - `SPOTIFY_CLIENT_ID`: Spotify developer application Client ID.
   - `SPOTIFY_CLIENT_SECRET`: Spotify developer application Client Secret.
-  - `SPOTIFY_REDIRECT_URI`: OAuth callback URI (default `http://127.0.0.1:8888/callback`).
+  - `SPOTIFY_REDIRECT_URI`: OAuth callback URI for desktop/loopback development (default `http://127.0.0.1:8888/callback`; the only plain-`http` form Spotify still accepts).
+  - `SPOTIFY_RELAY_URL`: HTTPS bounce page used by the phone QR login, e.g. `https://<you>.github.io/NuriaAssistant/spotify-callback.html`. Must match a Spotify Dashboard *Redirect URI* exactly. Empty = phone flow disabled, loopback only.
+  - `OWNER_NAME`: name Alpha greets on the alarm screen (default `Nuria`); blank = unaddressed greetings.
   - `TELEGRAM_BOT_TOKEN`: Telegram bot token for remote messaging.
   - `TELEGRAM_ALLOWED_CHAT_ID`: (Optional) Restrict Telegram bot to a single chat ID.
   - `VOICE_BACKEND_URL`: Base URL of the Python voice backend (default `http://127.0.0.1:8090`).
@@ -335,10 +359,12 @@ Rules to keep the UI smooth at 1024x600 on the Pi — do not regress these:
 - **Keep periodic work off the FX animation clock.** Only the 1-second clock tick is an FX `Timeline` (it must be, for label updates + alarm checks). Weather (30 min), Spotify polls (4s) and voice polls (1s) run on the shared daemon `backgroundTicker`.
 - **Cheap ticks stay cheap:** the date label only re-renders at midnight; the next-alarm / next-event hints and calendar badge recompute once per minute **but only rewrite their labels when the text actually changes** (text layout is the most expensive scene-graph op on the Pi — see the cached hint fields in `AssistantController`); the alarm due-check is allocation-free.
 - **No per-call compilation of `Pattern` or `DateTimeFormatter`:** `TelegramService` precompiles every regex as a static constant, and the calendar stack (`CalendarIcsParser`, `CalendarEvent.displayTime`) uses static formatters — `ofPattern` parses its pattern on every call, which the per-event calendar parse used to do hundreds of times per feed refresh.
-- **Zero ambient animation while hidden:** the mic orb breathing timeline never runs while the voice overlay is hidden behind Spotify or the photo frame (`startOrbBreathing` is guarded by overlay visibility); the idle orb opacity is quantized to 1% steps so the per-second wake-word-score jitter can't dirty the cached orb texture every poll.
+- **Zero ambient animation while hidden:** the mic orb breathing timeline never runs while the voice overlay is hidden behind Spotify (`startOrbBreathing` is guarded by overlay visibility); the idle orb opacity is quantized to 1% steps so the per-second wake-word-score jitter can't dirty the cached orb texture every poll.
 - **Wake-word energy gate:** the Python backend skips the (expensive) ONNX wake-word inference on near-silent chunks (`VOICE_WAKE_MIN_RMS`, default 150) — silence can never match a wake word, and this removes ~all inference load while the room is quiet.
 - **Back off when idle:** voice polls drop to 1 attempt / 5s while the backend is unreachable *or muted*; `VoiceBackendLauncher` gives up after one missing-dir check per run and throttles real spawn retries to 20s.
 - **Prebuilt HTTP requests** (`VoiceAssistantService.stateRequest`) and single-threaded executors avoid per-tick allocation churn.
+- **Static decoration stays static:** the constellation, vignette, Alpha's mark and every icon are plain shapes with no timeline attached — adding "personality" must never add a running animation.
+- **`FxmlContractTest` guards the template:** it asserts every `fx:id` has a controller field (and vice versa), every `on*` handler exists, and every `styleClass` used in the FXML is actually styled in `styles.css`. A typo now fails `./mvnw test` instead of showing a blank screen on the Pi — extend it rather than working around it.
 
 ## Planned Features (TODO)
 

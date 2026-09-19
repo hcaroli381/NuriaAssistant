@@ -13,9 +13,13 @@ public class ThemeManager {
     public static final int DARK_MODE_START_HOUR = 21; // 21:00 (9:00 PM)
     public static final int DARK_MODE_END_HOUR = 7;    // 07:00 (7:00 AM)
 
+    // Alpha speaks Spanish everywhere else, so her date does too.
+    private static final Locale SPANISH = Locale.of("es", "ES");
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
-    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.ENGLISH);
-    private static final DateTimeFormatter FULL_DATE_FORMATTER = DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", Locale.ENGLISH);
+    private static final DateTimeFormatter DATE_FORMATTER =
+            DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM", SPANISH);
+    private static final DateTimeFormatter FULL_DATE_FORMATTER =
+            DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM 'de' yyyy", SPANISH);
 
     /**
      * Determines whether the given LocalDateTime falls within the dark mode window (21:00 - 07:00).
@@ -57,25 +61,58 @@ public class ThemeManager {
      * Formats date showing the day of the week, day number, and month name.
      *
      * @param time The LocalDateTime to format.
-     * @return Formatted date string (e.g., "Thursday, 20 August").
+     * @return Formatted date string (e.g., "Jueves, 20 de agosto").
      */
     public static String formatDate(LocalDateTime time) {
         if (time == null) {
             return "";
         }
-        return time.format(DATE_FORMATTER);
+        return capitalizeFirst(time.format(DATE_FORMATTER));
     }
 
     /**
      * Formats full date including the year.
      *
      * @param time The LocalDateTime to format.
-     * @return Formatted full date string (e.g., "Thursday, 20 August 2026").
+     * @return Formatted full date string (e.g., "Jueves, 20 de agosto de 2026").
      */
     public static String formatFullDate(LocalDateTime time) {
         if (time == null) {
             return "";
         }
-        return time.format(FULL_DATE_FORMATTER);
+        return capitalizeFirst(time.format(FULL_DATE_FORMATTER));
+    }
+
+    /**
+     * Time-of-day greeting Alpha uses when an alarm wakes the house; the name is
+     * optional so an unconfigured install still reads naturally.
+     *
+     * @param time The LocalDateTime to greet by.
+     * @param name Person to address (may be null/blank).
+     * @return e.g. "Buenos días, Nuria" or "Buenas noches".
+     */
+    public static String greeting(LocalDateTime time, String name) {
+        if (time == null) {
+            return "";
+        }
+        int hour = time.getHour();
+        String greeting;
+        if (hour < 6 || hour >= 21) {
+            greeting = "Buenas noches";
+        } else if (hour < 13) {
+            greeting = "Buenos días";
+        } else if (hour < 21) {
+            greeting = "Buenas tardes";
+        } else {
+            greeting = "Buenas noches";
+        }
+        return name == null || name.isBlank() ? greeting : greeting + ", " + name;
+    }
+
+    private static String capitalizeFirst(String text) {
+        if (text == null || text.isEmpty()) {
+            return text;
+        }
+        return Character.toUpperCase(text.charAt(0)) + text.substring(1);
     }
 }

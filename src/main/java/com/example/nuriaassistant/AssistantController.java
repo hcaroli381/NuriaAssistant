@@ -8,12 +8,12 @@ import com.example.nuriaassistant.models.VoiceAssistantSnapshot;
 import com.example.nuriaassistant.services.AlarmService;
 import com.example.nuriaassistant.services.CalendarService;
 import com.example.nuriaassistant.services.NotificationServer;
-import com.example.nuriaassistant.services.PhotoFrameService;
 import com.example.nuriaassistant.services.TelegramService;
 import com.example.nuriaassistant.services.ThemeManager;
 import com.example.nuriaassistant.services.VoiceAssistantService;
 import com.example.nuriaassistant.services.VoiceBackendLauncher;
 import com.example.nuriaassistant.services.WeatherService;
+import com.example.nuriaassistant.spotify.SpotifyPairing;
 import com.example.nuriaassistant.spotify.SpotifyQrGenerator;
 import com.example.nuriaassistant.spotify.SpotifyService;
 import com.example.nuriaassistant.ui.NightDimmingController;
@@ -70,7 +70,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.nio.file.Path;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -103,7 +102,7 @@ public class AssistantController {
     private Label weatherCityLabel;
 
     @FXML
-    private Label weatherIconLabel;
+    private StackPane weatherIconBox;
 
     @FXML
     private Label weatherTempLabel;
@@ -231,22 +230,6 @@ public class AssistantController {
     @FXML
     private Label calendarBadgeLabel;
 
-    // Photo Frame UI
-    @FXML
-    private HBox photoFrameButton;
-
-    @FXML
-    private AnchorPane photoLayer;
-
-    @FXML
-    private ImageView photoViewA;
-
-    @FXML
-    private ImageView photoViewB;
-
-    @FXML
-    private Label photoCounterLabel;
-
     // Alarm Manager Sheet UI
     @FXML
     private AnchorPane alarmManagerLayer;
@@ -306,6 +289,9 @@ public class AssistantController {
     @FXML
     private Label alarmRingTitleLabel;
 
+    @FXML
+    private Label alarmRingGreetingLabel;
+
     // Night Dim Overlay UI (screen-saver dim while idle at night)
     @FXML
     private AnchorPane dimLayer;
@@ -323,6 +309,15 @@ public class AssistantController {
     @FXML
     private Label spotifyAuthStatusLabel;
 
+    // Personal touches
+    private String ownerName = "Nuria";
+
+    // Spotify phone pairing: HTTPS bounce page + tokens issued by this app.
+    // Written on the FX thread, read by the LAN callback server thread.
+    private String spotifyRelayUrl;
+    private volatile String pairingToken;
+    private volatile String previousPairingToken;
+
     private WeatherService weatherService;
     private NotificationServer notificationServer;
     private TelegramService telegramService;
@@ -333,6 +328,7 @@ public class AssistantController {
     private CalendarService calendarService;
 
     // UI State
+    private String cachedWeatherCondition = null;
     private boolean isCurrentlyShowingSpotify = false;
     private String currentCoverUrl = null;
     private Animation activeTransition = null;
@@ -385,19 +381,9 @@ public class AssistantController {
     private LocalDate selectedCalendarDate = null;
     private final Map<LocalDate, VBox> calendarDayCells = new HashMap<>();
     private static final DateTimeFormatter CALENDAR_MONTH_FORMAT =
-            DateTimeFormatter.ofPattern("MMMM yyyy", new Locale("es", "ES"));
+            DateTimeFormatter.ofPattern("MMMM yyyy", Locale.of("es", "ES"));
     private static final DateTimeFormatter CALENDAR_DAY_FORMAT =
-            DateTimeFormatter.ofPattern("EEEE d' de 'MMMM", new Locale("es", "ES"));
-
-    // Photo Frame State
-    private PhotoFrameService photoStore;
-    private List<Path> photoLibrary = List.of();
-    private int currentPhotoIndex = -1;
-    private boolean photoFrontIsA = true;
-    private Image preloadedPhoto = null;
-    private Path preloadedPhotoPath = null;
-    private PauseTransition photoSlideTimer = null;
-    private FadeTransition photoCrossFade = null;
+            DateTimeFormatter.ofPattern("EEEE d' de 'MMMM", Locale.of("es", "ES"));
 
     // Background thread executor for non-blocking Spotify polling
     private final ExecutorService spotifyExecutor = Executors.newSingleThreadExecutor(r -> {
@@ -478,11 +464,6 @@ public class AssistantController {
                     error -> { /* offline: keep showing cached data */ });
         }
 
-        // 1d. Initialize Photo Frame store (persistent library at ~/.alpha/photos)
-        photoStore = new PhotoFrameService();
-        photoLibrary = photoStore.listPhotos();
-        enableNodeCache(photoLayer);
-
         // 2. Initialize Weather Service
         String apiKey = configLoader.getProperty("OPENWEATHER_API_KEY");
         String city = configLoader.getProperty("OPENWEATHER_CITY");
@@ -491,6 +472,8 @@ public class AssistantController {
         if (weatherCityLabel != null) {
             weatherCityLabel.setText(displayCity);
         }
+        // Seed the glyph so the row never shows an empty slot before the first fetch.
+        applyWeatherIcon(null);
 
         boolean weatherConfigured = apiKey != null && !apiKey.isEmpty();
         if (weatherConfigured) {
@@ -523,14 +506,29 @@ public class AssistantController {
         String clientId = configLoader.getProperty("SPOTIFY_CLIENT_ID");
         String clientSecret = configLoader.getProperty("SPOTIFY_CLIENT_SECRET");
         String redirectUri = configLoader.getProperty("SPOTIFY_REDIRECT_URI");
+        if (redirectUri == null) {
+            // Loopback is the only http URI Spotify still accepts: used for
+            // desktop development, never for the phone flow.
+            redirectUri = "http://127.0.0.1:" + SpotifyPairing.CALLBACK_PORT + SpotifyPairing.CALLBACK_PATH;
+        }
+        spotifyRelayUrl = configLoader.getProperty("SPOTIFY_RELAY_URL");
 
-        boolean spotifyConfigured = clientId != null && clientSecret != null && redirectUri != null;
+        // Who Alpha talks to: her alarm greeting and her spoken touches.
+        String configuredOwner = configLoader.getProperty("OWNER_NAME");
+        if (configuredOwner != null && !configuredOwner.isBlank()) {
+            ownerName = configuredOwner;
+        }
+
+        boolean spotifyConfigured = clientId != null && clientSecret != null;
         if (spotifyConfigured) {
             spotifyService = new SpotifyService(clientId, clientSecret, redirectUri);
             Log.info("Controller", "Spotify service initialized.");
+            if (spotifyRelayUrl != null) {
+                Log.info("Controller", "Spotify phone pairing via " + spotifyRelayUrl);
+            }
 
             // Embedded OAuth callback server on port 8888 (accepts phone callbacks too)
-            spotifyService.startAuthCallbackServer(this::handleSpotifyCallback, 8888);
+            spotifyService.startAuthCallbackServer(this::handleSpotifyCallback, SpotifyPairing.CALLBACK_PORT);
 
             restoreOrRequestSpotifySession();
 
@@ -544,12 +542,6 @@ public class AssistantController {
 
         if (telegramToken != null && !telegramToken.isBlank()) {
             telegramService = new TelegramService(telegramToken, telegramChatId, this::displayNotification);
-            telegramService.setPhotoHandler(this::handleIncomingTelegramPhoto);
-            telegramService.setCommandHandler(command -> {
-                if ("foto".equals(command)) {
-                    Platform.runLater(this::openPhotoFrame);
-                }
-            });
             telegramService.start();
         }
 
@@ -711,7 +703,6 @@ public class AssistantController {
         stopOrbBreathing();
         voiceOverlayLayer.setVisible(false);
         closeCalendarScreen(true);
-        closePhotoFrame(true);
 
         if (activeTransition != null) {
             activeTransition.stop();
@@ -806,8 +797,7 @@ public class AssistantController {
                         if (weatherTempLabel != null) weatherTempLabel.setText("--°C");
                         if (weatherDescLabel != null) weatherDescLabel.setText("Data unavailable");
                     } else {
-                        String icon = WeatherUi.iconFor(data.description());
-                        if (weatherIconLabel != null) weatherIconLabel.setText(icon);
+                        applyWeatherIcon(data.description());
                         if (weatherTempLabel != null) weatherTempLabel.setText(String.format("%.1f°C", data.temperature()));
                         if (weatherDescLabel != null) weatherDescLabel.setText(WeatherUi.capitalize(data.description()));
                     }
@@ -815,8 +805,32 @@ public class AssistantController {
                 error -> {
                     if (weatherTempLabel != null) weatherTempLabel.setText("--°C");
                     if (weatherDescLabel != null) weatherDescLabel.setText("Connection error");
+                    applyWeatherIcon(null);
                 }
         );
+    }
+
+    /**
+     * Swaps the conditions glyph, but only when the condition actually changed:
+     * the weather refresh runs every 30 minutes and rebuilding identical shapes
+     * would dirty the cached row for nothing.
+     */
+    private void applyWeatherIcon(String description) {
+        if (weatherIconBox == null) {
+            return;
+        }
+        String condition = description == null ? "" : description.trim().toLowerCase(Locale.ROOT);
+        if (condition.equals(cachedWeatherCondition)) {
+            return;
+        }
+        cachedWeatherCondition = condition;
+
+        Node icon = WeatherUi.iconFor(description);
+        // Glyphs are authored on a 24px grid; the row wants them at ~30px.
+        double scale = 30.0 / WeatherUi.GRID;
+        icon.setScaleX(scale);
+        icon.setScaleY(scale);
+        weatherIconBox.getChildren().setAll(icon);
     }
 
     /**
@@ -843,33 +857,42 @@ public class AssistantController {
     }
 
     /**
-     * Handles Spotify OAuth callback with authorization code.
+     * Handles the OAuth callback, whether it arrives from the phone over the
+     * LAN (QR flow) or from a desktop browser (loopback flow).
      *
-     * @param authorizationCode OAuth authorization code.
+     * @return true when the code was accepted, so the phone's page can show the
+     *         confirmation; false when the state belongs to another attempt.
      */
-    public void handleSpotifyCallback(String authorizationCode) {
-        if (spotifyService != null) {
-            spotifyExecutor.submit(() -> {
-                boolean success = spotifyService.exchangeCodeForTokens(authorizationCode);
-                Platform.runLater(() -> {
-                    if (success) {
-                        Log.info("Controller", "Spotify successfully authorized.");
-                        onSpotifyConnected();
-                    } else {
-                        Log.error("Controller", "Spotify authorization failed.");
-                        if (spotifyAuthStatusLabel != null && spotifyAuthLayer.isVisible()) {
-                            spotifyAuthStatusLabel.setText("No se pudo conectar, escanea de nuevo");
-                            spotifyAuthStatusLabel.setStyle("-fx-text-fill: #ef4444;");
-                        }
-                        // Regenerate the QR so a fresh authorization URL is shown
-                        refreshSpotifyQr();
-                    }
-                });
+    public boolean handleSpotifyCallback(SpotifyService.AuthCallback callback) {
+        if (spotifyService == null || callback == null || !callback.hasCode()) {
+            return false;
+        }
+        if (!isOwnPairingState(callback.state())) {
+            Log.error("Controller", "Spotify: callback with unknown state ignored.");
+            return false;
+        }
+
+        spotifyExecutor.submit(() -> {
+            boolean success = spotifyService.exchangeCodeForTokens(callback.code());
+            Platform.runLater(() -> {
                 if (success) {
-                    pollCurrentlyPlaying();
+                    Log.info("Controller", "Spotify successfully authorized.");
+                    onSpotifyConnected();
+                } else {
+                    Log.error("Controller", "Spotify authorization failed.");
+                    if (spotifyAuthStatusLabel != null && spotifyAuthLayer.isVisible()) {
+                        spotifyAuthStatusLabel.setText("No se pudo conectar, escanea de nuevo");
+                        spotifyAuthStatusLabel.setStyle("-fx-text-fill: #f87a7a;");
+                    }
+                    // Regenerate the QR so a fresh authorization URL is shown
+                    refreshSpotifyQr();
                 }
             });
-        }
+            if (success) {
+                pollCurrentlyPlaying();
+            }
+        });
+        return true;
     }
 
     // =========================================================================
@@ -948,7 +971,7 @@ public class AssistantController {
             return;
         }
         try {
-            String authUrl = spotifyService.getAuthorizationUri();
+            String authUrl = spotifyService.getAuthorizationUri(spotifyRelayUrl, newPairingState());
             Log.info("Controller", "Spotify Auth URL: " + authUrl);
 
             BitMatrix matrix = SpotifyQrGenerator.generate(authUrl);
@@ -970,7 +993,7 @@ public class AssistantController {
             spotifyAuthQrView.setImage(qrImage);
 
             if (spotifyAuthStatusLabel != null) {
-                spotifyAuthStatusLabel.setText("Esperando conexi\u00f3n...");
+                spotifyAuthStatusLabel.setText("Esperando al m\u00f3vil...");
                 spotifyAuthStatusLabel.setStyle(null);
             }
         } catch (Exception e) {
@@ -982,10 +1005,44 @@ public class AssistantController {
     }
 
     /**
+     * Builds the state for a new pairing attempt: the random token plus, in the
+     * phone flow, the LAN endpoint the HTTPS bounce page must hand the code back
+     * to. The previous token stays valid so closing and reopening the sheet does
+     * not invalidate an authorization already in progress on her phone.
+     */
+    private String newPairingState() {
+        previousPairingToken = pairingToken;
+        pairingToken = SpotifyPairing.newToken();
+        if (spotifyRelayUrl == null) {
+            return pairingToken;
+        }
+        return new SpotifyPairing.State(pairingToken, SpotifyPairing.resolveHost(),
+                SpotifyPairing.CALLBACK_PORT).encode();
+    }
+
+    /** True when a callback state carries a token issued by this app. */
+    private boolean isOwnPairingState(String state) {
+        String token = state;
+        if (spotifyRelayUrl != null) {
+            SpotifyPairing.State parsed = SpotifyPairing.parse(state);
+            if (parsed == null) {
+                return false;
+            }
+            token = parsed.token();
+        }
+        return token != null
+                && (token.equals(pairingToken) || token.equals(previousPairingToken));
+    }
+
+    /**
      * Called on the FX thread once tokens are stored: dismisses the QR sheet
      * and confirms through Alpha's speech bubble.
      */
     private void onSpotifyConnected() {
+        // A stored session makes both tokens useless and stops late callbacks
+        // from a stale QR from being replayed.
+        pairingToken = null;
+        previousPairingToken = null;
         if (spotifyAuthLayer != null && spotifyAuthLayer.isVisible()) {
             closeSpotifyAuth();
         }
@@ -1133,7 +1190,7 @@ public class AssistantController {
                 dot.getStyleClass().add("cal-dot");
                 // All-day events get a sky-blue dot, timed ones violet
                 dot.setStyle("-fx-background-color: "
-                        + (event.allDay() ? "#38bdf8;" : "#a855f7;"));
+                        + (event.allDay() ? "#6fc7ef;" : "#a98bf5;"));
                 dots.getChildren().add(dot);
                 shown++;
             }
@@ -1284,256 +1341,6 @@ public class AssistantController {
     }
 
     // =========================================================================
-    // PHOTO FRAME (full-screen slideshow over ~/.alpha/photos)
-    // =========================================================================
-
-    /**
-     * Telegram photo hook (runs on the polling thread): persists the bytes and
-     * reveals the new photo full-screen with an Alpha confirmation bubble.
-     */
-    private boolean handleIncomingTelegramPhoto(TelegramService.TelegramPhoto photo, byte[] data) {
-        try {
-            Path saved = photoStore.save(data);
-            Platform.runLater(() -> {
-                photoLibrary = photoStore.listPhotos();
-                displayNotification("\ud83d\udcf8 Foto a\u00f1adida al marco");
-                int index = photoLibrary.indexOf(saved);
-                showPhotoAt(index >= 0 ? index : photoLibrary.size() - 1);
-            });
-            Log.info("Controller", "PhotoFrame: stored Telegram photo (" + data.length + " bytes)");
-            return true;
-        } catch (Exception e) {
-            Log.error("Controller", "PhotoFrame: failed to store Telegram photo: " + e.getMessage());
-            return false;
-        }
-    }
-
-    /** Photo icon button: opens the ambient slideshow on the most recent photo. */
-    @FXML
-    public void openPhotoFrame() {
-        if (photoLayer == null || photoLayer.isVisible()) {
-            return;
-        }
-        photoLibrary = photoStore.listPhotos();
-        if (photoLibrary.isEmpty()) {
-            displayNotification("\ud83d\uddbc\ufe0f El marco est\u00e1 vac\u00edo: m\u00e1ndame una foto por Telegram");
-            return;
-        }
-        currentPhotoIndex = -1;
-        presentPhotoLayer();
-        displayPhoto(photoLibrary.size() - 1);
-    }
-
-    @FXML
-    public void closePhotoFrame() {
-        closePhotoFrame(false);
-    }
-
-    private void closePhotoFrame(boolean instant) {
-        if (photoLayer == null || !photoLayer.isVisible()) {
-            return;
-        }
-        if (photoSlideTimer != null) {
-            photoSlideTimer.stop();
-        }
-        if (photoCrossFade != null) {
-            photoCrossFade.stop();
-            photoCrossFade = null;
-        }
-        Runnable finish = () -> {
-            photoLayer.setVisible(false);
-            photoLayer.setOpacity(0.0);
-            photoViewA.setImage(null);
-            photoViewB.setImage(null);
-            photoViewA.setOpacity(1.0);
-            photoViewB.setOpacity(0.0);
-            photoFrontIsA = true;
-            currentPhotoIndex = -1;
-            preloadedPhoto = null;
-            preloadedPhotoPath = null;
-            // Spotify owns the overlay lifecycle while it is playing.
-            if (!isCurrentlyShowingSpotify) {
-                voiceOverlayLayer.setVisible(true);
-                if ("IDLE".equals(voiceUiState)) {
-                    startOrbBreathing();
-                }
-            }
-        };
-        if (instant) {
-            finish.run();
-            return;
-        }
-        FadeTransition fadeOut = new FadeTransition(Duration.millis(220), photoLayer);
-        fadeOut.setToValue(0.0);
-        fadeOut.setOnFinished(e -> finish.run());
-        fadeOut.play();
-    }
-
-    /** Reveals the frame over everything except notifications/alarms. */
-    private void presentPhotoLayer() {
-        closeCalendarScreen(true);
-        stopOrbBreathing();
-        voiceOverlayLayer.setVisible(false);
-        photoLayer.setOpacity(0.0);
-        photoLayer.setVisible(true);
-        FadeTransition fadeIn = new FadeTransition(Duration.millis(250), photoLayer);
-        fadeIn.setFromValue(0.0);
-        fadeIn.setToValue(1.0);
-        fadeIn.play();
-    }
-
-    /**
-     * Crossfades to the photo at the given index (wrapped). Identical indices
-     * only restart the slide timer so duplicate callbacks never re-decode.
-     */
-    private void showPhotoAt(int index) {
-        if (photoLayer == null || photoLibrary.isEmpty()) {
-            return;
-        }
-        int target = Math.floorMod(index, photoLibrary.size());
-        if (!photoLayer.isVisible()) {
-            currentPhotoIndex = -1;
-            presentPhotoLayer();
-        }
-        if (target == currentPhotoIndex) {
-            scheduleNextSlide();
-            return;
-        }
-        displayPhoto(target);
-    }
-
-    @FXML
-    public void showPreviousPhoto() {
-        navigatePhotos(-1);
-    }
-
-    @FXML
-    public void showNextPhoto() {
-        navigatePhotos(1);
-    }
-
-    private void navigatePhotos(int delta) {
-        if (!photoLayer.isVisible() || photoLibrary.isEmpty()) {
-            return;
-        }
-        int base = currentPhotoIndex < 0 ? 0 : currentPhotoIndex;
-        displayPhoto(Math.floorMod(base + delta, photoLibrary.size()));
-        scheduleNextSlide();
-    }
-
-    /**
-     * Advances to the given library slot, skipping corrupt files (bounded by
-     * the library size). Uses two stacked ImageViews so transitions are pure
-     * opacity fades; the replaced bitmap is released as soon as it is covered.
-     */
-    private void displayPhoto(int startIndex) {
-        ImageView front = photoFrontIsA ? photoViewA : photoViewB;
-        ImageView back = photoFrontIsA ? photoViewB : photoViewA;
-
-        // An interrupted fade leaves two populated views: reset the hidden one.
-        if (photoCrossFade != null) {
-            photoCrossFade.stop();
-            photoCrossFade = null;
-            front.setOpacity(1.0);
-        }
-        back.setImage(null);
-        back.setOpacity(0.0);
-
-        Image image = null;
-        int index = startIndex;
-        for (int attempts = photoLibrary.size(); attempts > 0; attempts--) {
-            currentPhotoIndex = index;
-            image = takePreloaded(photoLibrary.get(index));
-            if (!image.isError()) {
-                break;
-            }
-            Log.error("Controller", "PhotoFrame: unreadable image skipped: " + photoLibrary.get(index));
-            image = null;
-            index = Math.floorMod(index + 1, photoLibrary.size());
-        }
-        if (image == null) {
-            closePhotoFrame(true);
-            displayNotification("\u26a0\ufe0f No hay fotos legibles en el marco");
-            return;
-        }
-
-        back.setImage(image);
-        photoFrontIsA = !photoFrontIsA;
-        updatePhotoCounter();
-
-        if (front.getImage() == null) {
-            preloadNextPhoto();
-            scheduleNextSlide();
-            return; // very first paint: nothing to fade from
-        }
-
-        photoCrossFade = new FadeTransition(Duration.millis(900), back);
-        photoCrossFade.setFromValue(0.0);
-        photoCrossFade.setToValue(1.0);
-        photoCrossFade.setOnFinished(e -> {
-            front.setImage(null); // release the replaced bitmap (Pi RAM)
-            front.setOpacity(0.0);
-            photoCrossFade = null;
-            preloadNextPhoto();
-        });
-        photoCrossFade.play();
-        scheduleNextSlide();
-    }
-
-    /**
-     * One-shot 15s pause between slides; recreated never, restarted always,
-     * so periodic work stays off the FX animation clock between fires.
-     */
-    private void scheduleNextSlide() {
-        if (photoSlideTimer == null) {
-            photoSlideTimer = new PauseTransition(Duration.seconds(15));
-            photoSlideTimer.setOnFinished(e -> {
-                if (photoLayer.isVisible() && photoLibrary.size() > 1) {
-                    displayPhoto((currentPhotoIndex + 1) % photoLibrary.size());
-                }
-            });
-        }
-        photoSlideTimer.playFrom(Duration.ZERO);
-    }
-
-    /**
-     * Decodes the next photo ahead of time so crossfades are instant even on
-     * the Pi: backgroundLoading keeps the decode off the FX thread and the
-     * downscale to screen size caps each bitmap at ~2.4 MB.
-     */
-    private void preloadNextPhoto() {
-        if (photoLibrary.isEmpty() || photoLibrary.size() < 2) {
-            return;
-        }
-        Path nextPath = photoLibrary.get((currentPhotoIndex + 1) % photoLibrary.size());
-        if (nextPath.equals(preloadedPhotoPath)) {
-            return;
-        }
-        preloadedPhotoPath = nextPath;
-        preloadedPhoto = createPhotoImage(nextPath);
-    }
-
-    private Image takePreloaded(Path path) {
-        if (preloadedPhoto != null && path.equals(preloadedPhotoPath)) {
-            Image image = preloadedPhoto;
-            preloadedPhoto = null;
-            preloadedPhotoPath = null;
-            return image;
-        }
-        return createPhotoImage(path);
-    }
-
-    private static Image createPhotoImage(Path path) {
-        return new Image(path.toUri().toString(), 1024, 600, true, true, true);
-    }
-
-    private void updatePhotoCounter() {
-        if (photoCounterLabel != null) {
-            photoCounterLabel.setText((currentPhotoIndex + 1) + " / " + photoLibrary.size());
-        }
-    }
-
-    // =========================================================================
     // VOICE ASSISTANT FRONT-END (Python backend on port 8090)
     // =========================================================================
 
@@ -1666,13 +1473,13 @@ public class AssistantController {
 
         switch (target) {
             case "OFFLINE" -> {
-                setVoiceTheme("#64748b", "100,116,139", 0.35);
+                setVoiceTheme("#6b7f9c", "107,127,156", 0.35);
                 stopThinkingDots();
                 stopOrbBreathing();
                 hideVoiceCard(true);
             }
             case "IDLE" -> {
-                setVoiceTheme("#38bdf8", "56,189,248", 1.0);
+                setVoiceTheme("#6fc7ef", "111,199,239", 1.0);
                 stopThinkingDots();
                 startOrbBreathing();
                 if ("SPEAKING".equals(previous) || "ERROR".equals(previous)) {
@@ -1682,7 +1489,7 @@ public class AssistantController {
                 }
             }
             case "LISTENING" -> {
-                setVoiceTheme("#22c55e", "34,197,94", 1.0);
+                setVoiceTheme("#63d6a4", "99,214,164", 1.0);
                 stopThinkingDots();
                 stopOrbBreathing();
                 voiceDotsRow.setVisible(false);
@@ -1694,7 +1501,7 @@ public class AssistantController {
                 showVoiceCard();
             }
             case "PROCESSING" -> {
-                setVoiceTheme("#f59e0b", "245,158,11", 1.0);
+                setVoiceTheme("#f0b25e", "240,178,94", 1.0);
                 stopOrbBreathing();
                 voiceReplyBubble.setVisible(false);
                 String transcript = snapshot.lastTranscript();
@@ -1706,7 +1513,7 @@ public class AssistantController {
                 showVoiceCard();
             }
             case "SPEAKING" -> {
-                setVoiceTheme("#a855f7", "168,85,247", 1.0);
+                setVoiceTheme("#a98bf5", "169,139,245", 1.0);
                 stopThinkingDots();
                 voiceDotsRow.setVisible(false);
                 voiceReplyLabel.setText(snapshot.lastReply());
@@ -1714,7 +1521,7 @@ public class AssistantController {
                 voiceStatusLabel.setText("Alpha dice:");
             }
             case "ERROR" -> {
-                setVoiceTheme("#ef4444", "239,68,68", 1.0);
+                setVoiceTheme("#f87a7a", "248,122,122", 1.0);
                 stopThinkingDots();
                 stopOrbBreathing();
                 voiceDotsRow.setVisible(false);
@@ -1772,8 +1579,9 @@ public class AssistantController {
      */
     private void setVoiceTheme(String hex, String rgb, double orbOpacity) {
         Color color = Color.web(hex);
-        voiceMicIcon.setFill(color);
-        voiceCardMicIcon.setFill(color);
+        // The mic glyphs are stroke-drawn (see styles.css .mic-glyph).
+        voiceMicIcon.setStroke(color);
+        voiceCardMicIcon.setStroke(color);
         voiceStatusLabel.setStyle("-fx-text-fill: " + hex + ";");
         voiceOrb.setStyle("-fx-background-color: rgba(" + rgb + ", 0.16);"
                 + " -fx-border-color: rgba(" + rgb + ", 0.55);");
@@ -1826,7 +1634,6 @@ public class AssistantController {
 
         voiceMicIcon.setVisible(false);
         voiceMicOffIcon.setVisible(true);
-        voiceMicOffIcon.setFill(Color.web("#ef4444"));
 
         if (!voiceOrb.getStyleClass().contains("voice-orb-muted")) {
             voiceOrb.getStyleClass().add("voice-orb-muted");
@@ -1929,7 +1736,7 @@ public class AssistantController {
 
     private void startOrbBreathing() {
         // Never animate an invisible orb: the breathing timeline would keep
-        // pulsing the FX clock 24/7 while Spotify / the photo frame hide the
+        // pulsing the FX clock 24/7 while Spotify hides the
         // voice overlay. Restart paths re-enter with the overlay visible.
         if (voiceOverlayLayer == null || !voiceOverlayLayer.isVisible()) {
             return;
@@ -1987,6 +1794,7 @@ public class AssistantController {
         nightDimming.wake();
 
         alarmRingTimeLabel.setText(alarm.displayTime());
+        alarmRingGreetingLabel.setText(ThemeManager.greeting(LocalDateTime.now(), ownerName));
         String title = alarm.label();
         alarmRingTitleLabel.setText(title == null || title.isBlank() ? "Alarma" : title);
 
@@ -1995,7 +1803,6 @@ public class AssistantController {
             closeAlarmManager();
         }
         closeCalendarScreen(true);
-        closePhotoFrame(true);
 
         ensureAlarmSound();
         if (alarmPlayer != null) {
@@ -2448,14 +2255,6 @@ public class AssistantController {
         }
         if (nightDimming != null) {
             nightDimming.stop();
-        }
-        if (photoSlideTimer != null) {
-            photoSlideTimer.stop();
-            photoSlideTimer = null;
-        }
-        if (photoCrossFade != null) {
-            photoCrossFade.stop();
-            photoCrossFade = null;
         }
         if (alarmPlayer != null) {
             try {

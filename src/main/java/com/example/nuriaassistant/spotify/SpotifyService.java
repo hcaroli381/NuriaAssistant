@@ -28,8 +28,10 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.function.Consumer;
+import java.util.Map;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -93,63 +95,81 @@ public class SpotifyService {
      * @throws ParseException         If parsing error occurs.
      */
     public String getAuthorizationUri() throws IOException, SpotifyWebApiException, ParseException {
-        AuthorizationCodeUriRequest authRequest = spotifyApi.authorizationCodeUri()
-                .scope("user-read-currently-playing,user-read-playback-state")
-                .show_dialog(false)
-                .build();
+        return getAuthorizationUri(null, null);
+    }
 
-        URI uri = authRequest.execute();
+    /**
+     * Builds the authorize URL for a specific redirect URI (overriding the one
+     * configured on the API client) and state value. The phone QR login uses
+     * this to point the callback at the whitelisted HTTPS bounce page while
+     * carrying this Pi's LAN endpoint inside the state.
+     *
+     * @param redirectUri HTTPS bounce page, or null to use the configured URI.
+     * @param state       Opaque state echoed back by Spotify, or null for none.
+     * @return Spotify authorization URL.
+     */
+    public String getAuthorizationUri(String redirectUri, String state)
+            throws IOException, SpotifyWebApiException, ParseException {
+        AuthorizationCodeUriRequest.Builder builder = spotifyApi.authorizationCodeUri()
+                .scope("user-read-currently-playing,user-read-playback-state")
+                .show_dialog(false);
+
+        if (redirectUri != null && !redirectUri.isBlank()) {
+            builder.redirect_uri(URI.create(redirectUri));
+        }
+        if (state != null && !state.isBlank()) {
+            builder.state(state);
+        }
+
+        URI uri = builder.build().execute();
         return uri.toString();
+    }
+
+    /** One OAuth callback: the code Spotify issued, plus the state we sent. */
+    public record AuthCallback(String code, String state, String error) {
+
+        public boolean hasCode() {
+            return code != null && !code.isBlank();
+        }
     }
 
     /**
      * Starts an embedded HTTP server to automatically receive the OAuth callback code on the specified port.
+     * Bound to {@code 0.0.0.0} so the phone can hand the code back over the LAN.
      *
-     * @param onCodeReceived Callback invoked when the authorization code is received.
+     * @param onCodeReceived Receives the callback and returns true when the app
+     *                       accepted it (drives the confirmation page on the phone).
      * @param port           Port to listen on (e.g. 8888).
      */
-    public void startAuthCallbackServer(Consumer<String> onCodeReceived, int port) {
+    public void startAuthCallbackServer(Function<AuthCallback, Boolean> onCodeReceived, int port) {
         if (authCallbackServer != null) {
             return;
         }
         try {
             authCallbackServer = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
-            authCallbackServer.createContext("/callback", exchange -> {
-                String query = exchange.getRequestURI().getQuery();
-                String code = null;
-                if (query != null) {
-                    for (String param : query.split("&")) {
-                        String[] pair = param.split("=");
-                        if (pair.length == 2 && "code".equals(pair[0])) {
-                            code = java.net.URLDecoder.decode(pair[1], java.nio.charset.StandardCharsets.UTF_8);
-                            break;
-                        }
-                    }
+            authCallbackServer.createContext(SpotifyPairing.CALLBACK_PATH, exchange -> {
+                Map<String, String> params = parseQuery(exchange.getRequestURI().getQuery());
+                AuthCallback callback = new AuthCallback(
+                        params.get("code"), params.get("state"), params.get("error"));
+
+                boolean accepted = false;
+                if (callback.hasCode() && onCodeReceived != null) {
+                    accepted = Boolean.TRUE.equals(onCodeReceived.apply(callback));
                 }
 
-                String response;
-                if (code != null) {
-                    response = "<!DOCTYPE html><html><head><title>Alpha Assistant - Spotify Connected</title></head>"
-                            + "<body style='font-family: Arial, sans-serif; text-align: center; padding-top: 50px; background: #121212; color: #1DB954;'>"
-                            + "<h1>✓ Spotify Connected Successfully!</h1>"
-                            + "<p style='color: #FFFFFF; font-size: 18px;'>You can now close this window and return to Alpha Assistant.</p>"
-                            + "</body></html>";
-                    exchange.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
-                    exchange.sendResponseHeaders(200, response.getBytes().length);
-                    try (OutputStream os = exchange.getResponseBody()) {
-                        os.write(response.getBytes());
-                    }
-                    if (onCodeReceived != null) {
-                        onCodeReceived.accept(code);
-                    }
-                } else {
-                    response = "<!DOCTYPE html><html><body style='font-family: Arial, sans-serif; text-align: center; padding-top: 50px;'>"
-                            + "<h1>Authentication Failed</h1><p>No authorization code received.</p></body></html>";
-                    exchange.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
-                    exchange.sendResponseHeaders(400, response.getBytes().length);
-                    try (OutputStream os = exchange.getResponseBody()) {
-                        os.write(response.getBytes());
-                    }
+                String response = accepted
+                        ? callbackPage("Listo", "Spotify conectado. Ya puedes cerrar esta pesta\u00f1a.")
+                        : callbackPage("Vaya, no se pudo conectar",
+                                (callback.hasCode()
+                                        ? "El c\u00f3digo caduc\u00f3 o es de otro intento. "
+                                        : "No lleg\u00f3 ning\u00fan c\u00f3digo. ")
+                                        + "Vuelve a escanear el QR de la pantalla.");
+
+                byte[] body = response.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                exchange.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
+                exchange.sendResponseHeaders(accepted ? 200 : 400, body.length);
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(body);
                 }
             });
             authCallbackServer.setExecutor(null);
@@ -158,6 +178,39 @@ public class SpotifyService {
         } catch (IOException e) {
             Log.error("Spotify", "Failed to start Spotify OAuth callback server on port " + port + ": " + e.getMessage());
         }
+    }
+
+    /** URL-decodes a raw query string into its parameters (order-independent). */
+    private static Map<String, String> parseQuery(String query) {
+        Map<String, String> params = new LinkedHashMap<>();
+        if (query == null || query.isBlank()) {
+            return params;
+        }
+        for (String param : query.split("&")) {
+            int equals = param.indexOf('=');
+            if (equals <= 0) {
+                continue;
+            }
+            String key = java.net.URLDecoder.decode(param.substring(0, equals), java.nio.charset.StandardCharsets.UTF_8);
+            String value = java.net.URLDecoder.decode(param.substring(equals + 1), java.nio.charset.StandardCharsets.UTF_8);
+            params.put(key, value);
+        }
+        return params;
+    }
+
+    /** Alpha-branded page shown on the phone once the Pi has the code. */
+    private static String callbackPage(String title, String message) {
+        return "<!DOCTYPE html><html lang='es'><head><meta charset='utf-8'>"
+                + "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+                + "<title>Alpha \u00b7 Spotify</title></head>"
+                + "<body style='margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;"
+                + "background:radial-gradient(120% 90% at 20% 15%, #132a4a 0%, #0a192f 55%, #050d18 100%);"
+                + "color:#ffffff;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;text-align:center;padding:32px;'>"
+                + "<div style='max-width:420px'>"
+                + "<div style='font-size:12px;letter-spacing:4px;color:#c084fc;font-weight:800;margin-bottom:18px;'>ALPHA</div>"
+                + "<h1 style='font-size:26px;margin:0 0 12px;'>" + title + "</h1>"
+                + "<p style='font-size:17px;line-height:1.5;color:#cbd5e1;margin:0;'>" + message + "</p>"
+                + "</div></body></html>";
     }
 
     /**

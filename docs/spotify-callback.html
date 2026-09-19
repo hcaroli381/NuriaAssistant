@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="referrer" content="no-referrer">
+    <title>Alpha · Spotify</title>
+    <style>
+        :root { color-scheme: dark; }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background:
+                radial-gradient(120% 90% at 18% 12%, rgba(56, 189, 248, .10) 0%, transparent 60%),
+                radial-gradient(120% 90% at 85% 92%, rgba(139, 92, 246, .12) 0%, transparent 62%),
+                radial-gradient(120% 90% at 20% 15%, #132a4a 0%, #0a192f 55%, #050d18 100%);
+            color: #fff;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            padding: 28px;
+            text-align: center;
+        }
+        .card { max-width: 440px; }
+        .tag {
+            font-size: 12px;
+            letter-spacing: 4px;
+            font-weight: 800;
+            color: #c084fc;
+            margin-bottom: 20px;
+        }
+        h1 { font-size: 27px; margin: 0 0 12px; letter-spacing: -.4px; }
+        p { font-size: 17px; line-height: 1.5; color: #cbd5e1; margin: 0; }
+        .ring {
+            width: 76px;
+            height: 76px;
+            margin: 0 auto 22px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle at 32% 28%, #8b5cf6 0%, #6d28d9 55%, #4c1d95 100%);
+            box-shadow: 0 0 0 1px rgba(196, 181, 253, .55), 0 0 34px rgba(124, 58, 237, .45);
+            font-size: 34px;
+        }
+        a.go {
+            display: inline-block;
+            margin-top: 26px;
+            padding: 15px 30px;
+            border-radius: 18px;
+            background: rgba(29, 185, 84, .16);
+            border: 1px solid rgba(29, 185, 84, .55);
+            color: #1ed760;
+            font-size: 17px;
+            font-weight: 700;
+            text-decoration: none;
+        }
+        .fine { margin-top: 18px; font-size: 13px; color: #7d93b5; line-height: 1.5; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+<div class="card">
+    <div class="tag">ALPHA</div>
+    <div class="ring" id="ring">🎧</div>
+    <h1 id="title">Un segundo…</h1>
+    <p id="message">Estoy recibiendo la confirmación de Spotify.</p>
+    <a class="go hidden" id="go" href="#">Volver a Alpha</a>
+    <p class="fine hidden" id="fine">Si no vuelve sola, toca el botón.</p>
+</div>
+
+<script>
+    // This page is the only fixed HTTPS URL in the login flow (Spotify rejects
+    // plain-http LAN redirects). The Pi's LAN endpoint travels inside OAuth's
+    // `state`, so the code can be handed back over the local network — nothing
+    // is stored on this host.
+    (function () {
+        const params = new URLSearchParams(window.location.search);
+        const code = params.get('code');
+        const state = params.get('state') || '';
+        const error = params.get('error');
+
+        const title = document.getElementById('title');
+        const message = document.getElementById('message');
+        const ring = document.getElementById('ring');
+        const go = document.getElementById('go');
+        const fine = document.getElementById('fine');
+
+        function stop(titleText, bodyText, icon) {
+            ring.textContent = icon;
+            title.textContent = titleText;
+            message.textContent = bodyText;
+        }
+
+        // state = <token> ~ <host> ~ <port>; the host must be a private name or
+        // IPv4 literal so a crafted link can never bounce somewhere foreign.
+        const ipv4 = /^(?:\d{1,3}\.){3}\d{1,3}$/;
+        const mdns = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.local$/i;
+        const parts = state.split('~');
+        const host = parts.length === 3 ? parts[1] : '';
+        const port = parts.length === 3 ? parseInt(parts[2], 10) : NaN;
+
+        const hostOk = ipv4.test(host)
+            ? host.split('.').every(function (n) { return parseInt(n, 10) <= 255; })
+            : mdns.test(host);
+        const stateOk = parts.length === 3 && hostOk && port >= 1 && port <= 65535;
+
+        if (error) {
+            stop('Has cancelado el acceso', 'Alpha no se ha conectado a Spotify. Vuelve a escanear el código de la pantalla.', '🙈');
+            return;
+        }
+        if (!code) {
+            stop('No llegó ningún código', 'Abre esta página escaneando el código que aparece en la pantalla de Alpha.', '🤔');
+            return;
+        }
+        if (!stateOk) {
+            stop('Código sin destino', 'Este enlace no trae la dirección de tu Alpha. Escanea el código que aparece en su pantalla.', '⚠️');
+            return;
+        }
+
+        const target = 'http://' + host + ':' + port + '/callback?code='
+            + encodeURIComponent(code) + '&state=' + encodeURIComponent(state);
+
+        // Keep the authorization code out of the address bar / history.
+        try { history.replaceState(null, '', window.location.pathname); } catch (e) { }
+
+        stop('Ya casi está', 'Enviando la confirmación a Alpha…', '🎧');
+        go.href = target;
+        go.classList.remove('hidden');
+        fine.classList.remove('hidden');
+        window.setTimeout(function () { window.location.replace(target); }, 400);
+    })();
+</script>
+</body>
+</html>

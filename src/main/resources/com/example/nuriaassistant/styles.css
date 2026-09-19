@@ -1,6 +1,19 @@
 /* ==========================================================================
-   ALPHA ASSISTANT — AURORA NAVY STYLESHEET
-   Deep navy ambience with sky-blue / violet aurora accents.
+   ALPHA — "AURORA DUSK" STYLESHEET
+
+   A hand-mixed palette rather than a framework's defaults: an ink-navy night
+   that drifts to violet at the edges, with Alpha's iris aura, a soft aurora
+   blue for the clock and a warm ember for alarms.
+
+     ink-950 #040b16   ink-900 #08152a   ink-800 #0d1f3a   ink-700 #142a49
+     ink-600 #1d3a5e
+     aurora  #6fc7ef   aurora-dim #a9dff6
+     iris    #a98bf5   iris-deep  #7c5cf0
+     mint    #63d6a4   ember      #f0b25e   rose #f87a7a
+     text    #ffffff   text-2 #dbe6f5   text-3 #93a8c4   text-4 #6b7f9c
+
+   Type: Space Grotesk (bundled, see ui/Fonts.java). JavaFX has no
+   letter-spacing property, so tracked-out labels are written spaced by hand.
    Glassmorphic surfaces, unified radii (14/18/22/28), soft depth.
    Optimized for a 1024x600 Raspberry Pi touchscreen (opacity/transform
    animations only; no per-frame blurs).
@@ -12,19 +25,168 @@
    translucent aurora glows on top.
    -------------------------------------------------------------------------- */
 .root {
-    -fx-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Ubuntu", Cantarell, sans-serif;
+    -fx-font-family: "Space Grotesk";
     -fx-background-color:
         radial-gradient(focus-angle 0.0deg, focus-distance 0.0%, center 88.0% 6.0%, radius 52.0%,
-            rgba(56, 189, 248, 0.10) 0.0%, transparent 62.0%),
+            rgba(111, 199, 239, 0.10) 0.0%, transparent 62.0%),
         radial-gradient(focus-angle 0.0deg, focus-distance 0.0%, center 8.0% 96.0%, radius 58.0%,
-            rgba(139, 92, 246, 0.11) 0.0%, transparent 64.0%),
+            rgba(124, 92, 240, 0.11) 0.0%, transparent 64.0%),
         radial-gradient(focus-angle 0.0deg, focus-distance 0.0%, center 20.0% 18.0%, radius 100.0%,
-            #14294a 0.0%, #0a192f 48.0%, #040d1c 100.0%);
+            #142a49 0.0%, #08152a 48.0%, #030a13 100.0%);
 }
 
 .root-container {
+    -fx-font-family: "Space Grotesk";
     -fx-background-color: radial-gradient(focus-angle 0.0deg, focus-distance 0.0%, center 20.0% 20.0%, radius 100.0%,
-            #132a4a 0.0%, #0a192f 50.0%, #050d18 100.0%);
+            #142a49 0.0%, #08152a 50.0%, #040b16 100.0%);
+}
+
+/* --------------------------------------------------------------------------
+   Alpha's icon hand
+   Every glyph in the UI is assembled from plain shapes (Circle/Line/Rectangle)
+   or a stroke-only SVGPath, so one weight — 1.7px on a 24px grid — runs through
+   the chips, the sheets and her face. Recoloring is a stroke change, never a
+   new asset.
+   -------------------------------------------------------------------------- */
+.icon-line,
+.icon-glyph,
+.mic-glyph,
+.alpha-face-mouth {
+    -fx-fill: transparent;
+    -fx-stroke: #a9dff6;
+    -fx-stroke-width: 1.7px;
+    -fx-stroke-line-cap: round;
+    -fx-stroke-line-join: round;
+}
+
+.icon-line-ember {
+    -fx-stroke: #f0b25e;
+}
+
+.icon-line-iris {
+    -fx-stroke: #a98bf5;
+}
+
+.icon-glyph {
+    -fx-stroke: #c6d4e7;
+}
+
+/* The mic is recolored per state from AssistantController.setVoiceTheme */
+.mic-glyph {
+    -fx-stroke: #6fc7ef;
+}
+
+.mic-glyph-muted {
+    -fx-stroke: #f87a7a;
+}
+
+/* Square glass button used by every sheet's close affordance */
+.icon-button {
+    -fx-pref-width: 34px;
+    -fx-pref-height: 34px;
+    -fx-background-color: rgba(255, 255, 255, 0.06);
+    -fx-background-radius: 13px;
+    -fx-cursor: hand;
+}
+
+.icon-button:hover {
+    -fx-background-color: rgba(169, 139, 245, 0.30);
+}
+
+.icon-button:hover .icon-glyph {
+    -fx-stroke: #ffffff;
+}
+
+/* --------------------------------------------------------------------------
+   Alpha's sky (home background character)
+   Static shapes only: her constellation, its orbit and a dusk vignette. No
+   animation, so the Pi rasterises them once and then ignores them.
+   -------------------------------------------------------------------------- */
+.star {
+    -fx-fill: rgba(169, 223, 246, 0.55);
+}
+
+.star-iris {
+    -fx-fill: #a98bf5;
+}
+
+.star-line {
+    -fx-stroke: rgba(169, 223, 246, 0.13);
+    -fx-stroke-width: 1px;
+}
+
+.star-ring {
+    -fx-fill: transparent;
+    -fx-stroke: rgba(169, 223, 246, 0.07);
+    -fx-stroke-width: 1px;
+}
+
+.home-vignette {
+    -fx-background-color:
+        radial-gradient(focus-angle 0.0deg, focus-distance 0.0%, center 26.0% 34.0%, radius 76.0%,
+            transparent 42.0%, rgba(2, 7, 16, 0.55) 100.0%),
+        linear-gradient(to bottom, rgba(2, 7, 16, 0.40) 0.0%, transparent 20.0%);
+}
+
+/* Her signature, bottom-left of the home screen */
+.alpha-mark-halo {
+    -fx-fill: transparent;
+    -fx-stroke: rgba(169, 139, 245, 0.55);
+    -fx-stroke-width: 1.2px;
+}
+
+.alpha-mark-core {
+    -fx-fill: #a98bf5;
+}
+
+.alpha-mark-dot {
+    -fx-fill: #ffffff;
+}
+
+.alpha-wordmark {
+    -fx-text-fill: #a9dff6;
+    -fx-font-size: 13px;
+    -fx-font-weight: 700;
+}
+
+.alpha-wordmark-sub {
+    -fx-text-fill: #6b7f9c;
+    -fx-font-size: 11px;
+    -fx-font-weight: 500;
+}
+
+/* Her face inside the speech bubble: white shell, dark features */
+.alpha-face {
+    -fx-fill: #ffffff;
+}
+
+.alpha-face-eye {
+    -fx-fill: #3d2472;
+}
+
+.alpha-face-mouth {
+    -fx-stroke: #3d2472;
+    -fx-stroke-width: 2.2px;
+}
+
+/* Her glyph on the alarm screen: bigger, warmer, with a breathing halo */
+.alarm-ring-halo {
+    -fx-fill: transparent;
+    -fx-stroke: rgba(240, 178, 94, 0.16);
+    -fx-stroke-width: 1.5px;
+}
+
+.alarm-ring-glyph {
+    -fx-fill: transparent;
+    -fx-stroke: #f0b25e;
+    -fx-stroke-width: 2.6px;
+    -fx-stroke-line-cap: round;
+}
+
+.alarm-ring-greeting {
+    -fx-text-fill: #dbe6f5;
+    -fx-font-size: 21px;
+    -fx-font-weight: 600;
 }
 
 /* --------------------------------------------------------------------------
@@ -43,16 +205,56 @@
 .minimal-date {
     -fx-font-size: 28px;
     -fx-font-weight: 700;
-    -fx-text-fill: #38bdf8;
-    -fx-effect: dropshadow(gaussian, rgba(56, 189, 248, 0.25), 16, 0, 0, 2);
+    -fx-text-fill: #6fc7ef;
+    -fx-effect: dropshadow(gaussian, rgba(111, 199, 239, 0.25), 16, 0, 0, 2);
 }
 
 .minimal-weather-row {
     -fx-padding: 10px 0 0 0;
 }
 
-.minimal-weather-icon {
-    -fx-font-size: 28px;
+/* Conditions glyph (ui/WeatherUi), drawn on a 24px grid in Alpha's palette */
+.weather-sun {
+    -fx-fill: transparent;
+    -fx-stroke: #f0b25e;
+    -fx-stroke-width: 1.6px;
+    -fx-stroke-line-cap: round;
+}
+
+.weather-cloud {
+    -fx-fill: rgba(169, 223, 246, 0.92);
+    -fx-stroke: transparent;
+}
+
+.weather-drop {
+    -fx-fill: transparent;
+    -fx-stroke: #6fc7ef;
+    -fx-stroke-width: 1.7px;
+    -fx-stroke-line-cap: round;
+}
+
+.weather-bolt {
+    -fx-fill: #f0b25e;
+    -fx-stroke: transparent;
+}
+
+.weather-flake {
+    -fx-fill: transparent;
+    -fx-stroke: #ffffff;
+    -fx-stroke-width: 1.4px;
+    -fx-stroke-line-cap: round;
+}
+
+.weather-thermo {
+    -fx-fill: transparent;
+    -fx-stroke: #a9dff6;
+    -fx-stroke-width: 1.6px;
+    -fx-stroke-line-cap: round;
+}
+
+.weather-thermo-bulb {
+    -fx-fill: #f0b25e;
+    -fx-stroke: transparent;
 }
 
 .minimal-weather-temp {
@@ -63,13 +265,13 @@
 
 .minimal-weather-dot {
     -fx-font-size: 18px;
-    -fx-text-fill: #3b527a;
+    -fx-text-fill: #3e5375;
 }
 
 .minimal-weather-desc {
     -fx-font-size: 22px;
     -fx-font-weight: 500;
-    -fx-text-fill: #e2e8f0;
+    -fx-text-fill: #dbe6f5;
 }
 
 .minimal-weather-city {
@@ -85,58 +287,42 @@
    -------------------------------------------------------------------------- */
 .notification-bubble {
     -fx-background-color: linear-gradient(to bottom right,
-            rgba(30, 50, 86, 0.97) 0.0%, rgba(16, 31, 56, 0.97) 100.0%);
-    -fx-border-color: rgba(167, 139, 250, 0.38);
+            rgba(26, 48, 82, 0.97) 0.0%, rgba(14, 32, 58, 0.97) 100.0%);
+    -fx-border-color: rgba(173, 152, 250, 0.38);
     -fx-border-width: 1.5px;
     -fx-background-radius: 26px;
     -fx-border-radius: 26px;
     -fx-padding: 16px 24px 16px 16px;
-    -fx-effect: dropshadow(gaussian, rgba(88, 28, 135, 0.35), 26, 0.05, 0, 10),
+    -fx-effect: dropshadow(gaussian, rgba(80, 34, 124, 0.35), 26, 0.05, 0, 10),
                 dropshadow(gaussian, rgba(2, 8, 20, 0.65), 22, 0, 0, 8);
 }
 
 .notification-avatar {
     -fx-background-color: radial-gradient(focus-angle 0.0deg, focus-distance 0.0%, center 32.0% 28.0%, radius 95.0%,
-            #8b5cf6 0.0%, #6d28d9 55.0%, #4c1d95 100.0%);
+            #8f74ee 0.0%, #6a45c9 55.0%, #3d2472 100.0%);
     -fx-background-radius: 50%;
-    -fx-border-color: rgba(196, 181, 253, 0.75);
+    -fx-border-color: rgba(203, 188, 253, 0.75);
     -fx-border-radius: 50%;
     -fx-border-width: 1.5px;
-    -fx-effect: dropshadow(gaussian, rgba(124, 58, 237, 0.45), 16, 0, 0, 4);
+    -fx-effect: dropshadow(gaussian, rgba(118, 74, 226, 0.45), 16, 0, 0, 4);
 }
 
 .notification-avatar-glow {
     -fx-background-color: radial-gradient(focus-angle 0.0deg, focus-distance 0.0%, center 50.0% 50.0%, radius 50.0%,
-            rgba(167, 139, 250, 0.85) 0.0%, transparent 100.0%);
+            rgba(173, 152, 250, 0.85) 0.0%, transparent 100.0%);
     -fx-background-radius: 50%;
 }
 
 .notification-author {
-    -fx-text-fill: #c084fc;
+    -fx-text-fill: #c4aefb;
     -fx-font-size: 12px;
     -fx-font-weight: 800;
-    -fx-letter-spacing: 3px;
 }
 
 .notification-text {
     -fx-text-fill: #ffffff;
     -fx-font-size: 21px;
     -fx-font-weight: 600;
-}
-
-.notification-close-btn {
-    -fx-font-size: 17px;
-    -fx-font-weight: bold;
-    -fx-text-fill: #a5b4cf;
-    -fx-padding: 6px 12px;
-    -fx-background-color: rgba(255, 255, 255, 0.07);
-    -fx-background-radius: 14px;
-    -fx-cursor: hand;
-}
-
-.notification-close-btn:hover {
-    -fx-background-color: rgba(167, 139, 250, 0.30);
-    -fx-text-fill: #ffffff;
 }
 
 /* --------------------------------------------------------------------------
@@ -147,7 +333,7 @@
         radial-gradient(focus-angle 0.0deg, focus-distance 0.0%, center 80.0% 90.0%, radius 60.0%,
             rgba(29, 185, 84, 0.10) 0.0%, transparent 65.0%),
         radial-gradient(focus-angle 0.0deg, focus-distance 0.0%, center 25.0% 25.0%, radius 100.0%,
-            #10281f 0.0%, #0a1626 48.0%, #04101c 100.0%);
+            #0d2320 0.0%, #0a1626 48.0%, #04101c 100.0%);
 }
 
 .spotify-speaker-badge {
@@ -166,7 +352,7 @@
 }
 
 .spotify-art-card {
-    -fx-background-color: #0e1a2c;
+    -fx-background-color: #0d1f3a;
     -fx-background-radius: 24px;
     -fx-border-radius: 24px;
     -fx-border-color: rgba(255, 255, 255, 0.12);
@@ -178,7 +364,6 @@
     -fx-text-fill: #1ed760;
     -fx-font-size: 13px;
     -fx-font-weight: 800;
-    -fx-letter-spacing: 3px;
 }
 
 .spotify-song-title {
@@ -194,7 +379,7 @@
 }
 
 .spotify-album-title {
-    -fx-text-fill: #8ba1bd;
+    -fx-text-fill: #93a8c4;
     -fx-font-size: 16px;
     -fx-font-weight: 500;
 }
@@ -203,12 +388,11 @@
     -fx-text-fill: #1ed760;
     -fx-font-size: 26px;
     -fx-font-weight: bold;
-    -fx-letter-spacing: 1px;
     -fx-padding: 30px 0 0 0;
 }
 
 .spotify-intro-subtitle {
-    -fx-text-fill: #8ba1bd;
+    -fx-text-fill: #93a8c4;
     -fx-font-size: 16px;
 }
 
@@ -218,8 +402,8 @@
    idle=sky-blue, listening=green, processing=amber, speaking=purple, error=red
    -------------------------------------------------------------------------- */
 .voice-orb {
-    -fx-background-color: rgba(56, 189, 248, 0.14);
-    -fx-border-color: rgba(56, 189, 248, 0.55);
+    -fx-background-color: rgba(111, 199, 239, 0.14);
+    -fx-border-color: rgba(111, 199, 239, 0.55);
     -fx-background-radius: 34px;
     -fx-border-radius: 34px;
     -fx-border-width: 1.5px;
@@ -228,19 +412,19 @@
 }
 
 .voice-orb:hover {
-    -fx-background-color: rgba(56, 189, 248, 0.26);
+    -fx-background-color: rgba(111, 199, 239, 0.26);
 }
 
 .voice-orb-muted {
-    -fx-background-color: rgba(148, 163, 184, 0.12);
-    -fx-border-color: rgba(239, 68, 68, 0.6);
+    -fx-background-color: rgba(147, 168, 196, 0.12);
+    -fx-border-color: rgba(248, 122, 122, 0.6);
     -fx-background-radius: 34px;
     -fx-border-radius: 34px;
 }
 
 .voice-card {
-    -fx-background-color: rgba(13, 27, 52, 0.82);
-    -fx-border-color: rgba(148, 163, 184, 0.22);
+    -fx-background-color: rgba(13, 31, 58, 0.82);
+    -fx-border-color: rgba(147, 168, 196, 0.22);
     -fx-background-radius: 24px;
     -fx-border-radius: 24px;
     -fx-border-width: 1px;
@@ -249,19 +433,19 @@
 }
 
 .voice-status-text {
-    -fx-text-fill: #e2e8f0;
+    -fx-text-fill: #dbe6f5;
     -fx-font-size: 20px;
     -fx-font-weight: bold;
 }
 
 .voice-thinking-dot {
-    -fx-text-fill: #f59e0b;
+    -fx-text-fill: #f0b25e;
     -fx-font-size: 14px;
 }
 
 .voice-bubble-user {
-    -fx-background-color: rgba(56, 189, 248, 0.14);
-    -fx-border-color: rgba(56, 189, 248, 0.38);
+    -fx-background-color: rgba(111, 199, 239, 0.14);
+    -fx-border-color: rgba(111, 199, 239, 0.38);
     -fx-background-radius: 16px;
     -fx-border-radius: 16px;
     -fx-border-width: 1px;
@@ -269,15 +453,14 @@
 }
 
 .voice-bubble-user-author {
-    -fx-text-fill: #7dd3fc;
+    -fx-text-fill: #a9dff6;
     -fx-font-size: 11px;
     -fx-font-weight: 800;
-    -fx-letter-spacing: 2px;
 }
 
 .voice-bubble-alpha {
-    -fx-background-color: rgba(168, 85, 247, 0.15);
-    -fx-border-color: rgba(168, 85, 247, 0.38);
+    -fx-background-color: rgba(169, 139, 245, 0.15);
+    -fx-border-color: rgba(169, 139, 245, 0.38);
     -fx-background-radius: 16px;
     -fx-border-radius: 16px;
     -fx-border-width: 1px;
@@ -285,10 +468,9 @@
 }
 
 .voice-bubble-alpha-author {
-    -fx-text-fill: #c084fc;
+    -fx-text-fill: #c4aefb;
     -fx-font-size: 11px;
     -fx-font-weight: 800;
-    -fx-letter-spacing: 2px;
 }
 
 .voice-bubble-text {
@@ -300,25 +482,21 @@
 /* --------------------------------------------------------------------------
    Alarms: Next-Alarm Hint + Manager Entry Button
    -------------------------------------------------------------------------- */
-.next-alarm-icon {
-    -fx-font-size: 15px;
-}
-
 .next-alarm-text {
-    -fx-text-fill: #8ba1bd;
+    -fx-text-fill: #93a8c4;
     -fx-font-size: 16px;
     -fx-font-weight: 600;
 }
 
 .next-event-text {
-    -fx-text-fill: #8ba1bd;
+    -fx-text-fill: #93a8c4;
     -fx-font-size: 16px;
     -fx-font-weight: 600;
 }
 
 .alarm-clock-button {
-    -fx-background-color: rgba(56, 189, 248, 0.14);
-    -fx-border-color: rgba(56, 189, 248, 0.55);
+    -fx-background-color: rgba(111, 199, 239, 0.14);
+    -fx-border-color: rgba(111, 199, 239, 0.55);
     -fx-background-radius: 34px;
     -fx-border-radius: 34px;
     -fx-border-width: 1.5px;
@@ -327,7 +505,7 @@
 }
 
 .alarm-clock-button:hover {
-    -fx-background-color: rgba(56, 189, 248, 0.26);
+    -fx-background-color: rgba(111, 199, 239, 0.26);
 }
 
 .spotify-link-button {
@@ -348,7 +526,7 @@
    Spotify QR Login Sheet (Modal Card)
    -------------------------------------------------------------------------- */
 .spotify-auth-card {
-    -fx-background-color: rgba(13, 27, 52, 0.96);
+    -fx-background-color: rgba(13, 31, 58, 0.96);
     -fx-border-color: rgba(29, 185, 84, 0.4);
     -fx-border-width: 1px;
     -fx-background-radius: 28px;
@@ -365,20 +543,20 @@
 }
 
 .spotify-auth-qr-panel {
-    -fx-background-color: #f8fafc;
+    -fx-background-color: #f6f9fd;
     -fx-background-radius: 18px;
     -fx-padding: 16px;
 }
 
 .spotify-auth-hint {
-    -fx-text-fill: #e2e8f0;
+    -fx-text-fill: #dbe6f5;
     -fx-font-size: 15px;
     -fx-font-weight: 500;
     -fx-alignment: center;
 }
 
 .spotify-auth-status {
-    -fx-text-fill: #94a3b8;
+    -fx-text-fill: #8ea3bf;
     -fx-font-size: 14px;
     -fx-font-weight: 600;
 }
@@ -387,8 +565,8 @@
    Calendar Screen (Full-screen agenda)
    -------------------------------------------------------------------------- */
 .calendar-button {
-    -fx-background-color: rgba(168, 85, 247, 0.14);
-    -fx-border-color: rgba(168, 85, 247, 0.55);
+    -fx-background-color: rgba(169, 139, 245, 0.14);
+    -fx-border-color: rgba(169, 139, 245, 0.55);
     -fx-background-radius: 34px;
     -fx-border-radius: 34px;
     -fx-border-width: 1.5px;
@@ -397,17 +575,17 @@
 }
 
 .calendar-button:hover {
-    -fx-background-color: rgba(168, 85, 247, 0.28);
+    -fx-background-color: rgba(169, 139, 245, 0.28);
 }
 
 .calendar-badge {
     -fx-text-fill: #ffffff;
     -fx-font-size: 12px;
     -fx-font-weight: 800;
-    -fx-background-color: #a855f7;
+    -fx-background-color: #a98bf5;
     -fx-background-radius: 11px;
     -fx-border-radius: 11px;
-    -fx-border-color: rgba(13, 27, 52, 0.9);
+    -fx-border-color: rgba(13, 31, 58, 0.9);
     -fx-border-width: 1.5px;
     -fx-min-width: 22px;
     -fx-min-height: 22px;
@@ -416,8 +594,8 @@
 }
 
 .calendar-card {
-    -fx-background-color: rgba(13, 27, 52, 0.97);
-    -fx-border-color: rgba(148, 163, 184, 0.22);
+    -fx-background-color: rgba(13, 31, 58, 0.97);
+    -fx-border-color: rgba(147, 168, 196, 0.22);
     -fx-border-width: 1px;
     -fx-background-radius: 28px;
     -fx-border-radius: 28px;
@@ -432,7 +610,7 @@
 }
 
 .calendar-nav-button {
-    -fx-text-fill: #e2e8f0;
+    -fx-text-fill: #dbe6f5;
     -fx-font-size: 40px;
     -fx-font-weight: bold;
     -fx-padding: 4px 26px;
@@ -442,11 +620,11 @@
 }
 
 .calendar-nav-button:hover {
-    -fx-background-color: rgba(168, 85, 247, 0.35);
+    -fx-background-color: rgba(169, 139, 245, 0.35);
 }
 
 .calendar-weekday {
-    -fx-text-fill: #64748b;
+    -fx-text-fill: #6b7f9c;
     -fx-font-size: 16px;
     -fx-font-weight: 700;
 }
@@ -465,22 +643,22 @@
 }
 
 .cal-day-number {
-    -fx-text-fill: #e2e8f0;
+    -fx-text-fill: #dbe6f5;
     -fx-font-size: 19px;
     -fx-font-weight: 700;
 }
 
 .cal-day-other .cal-day-number {
-    -fx-text-fill: #475569;
+    -fx-text-fill: #43597a;
 }
 
 .cal-day-today {
     -fx-border-width: 1.5px;
-    -fx-border-color: rgba(56, 189, 248, 0.8);
+    -fx-border-color: rgba(111, 199, 239, 0.8);
 }
 
 .cal-day-selected {
-    -fx-background-color: rgba(56, 189, 248, 0.22);
+    -fx-background-color: rgba(111, 199, 239, 0.22);
 }
 
 .cal-dots-row {
@@ -497,8 +675,8 @@
 }
 
 .cal-event-card {
-    -fx-background-color: rgba(30, 41, 59, 0.75);
-    -fx-border-color: rgba(148, 163, 184, 0.25);
+    -fx-background-color: rgba(22, 40, 68, 0.75);
+    -fx-border-color: rgba(147, 168, 196, 0.25);
     -fx-border-width: 1px;
     -fx-background-radius: 16px;
     -fx-border-radius: 16px;
@@ -507,7 +685,7 @@
 }
 
 .cal-event-time {
-    -fx-text-fill: #38bdf8;
+    -fx-text-fill: #6fc7ef;
     -fx-font-size: 14px;
     -fx-font-weight: 700;
 }
@@ -525,60 +703,9 @@
 }
 
 .cal-empty-hint {
-    -fx-text-fill: #94a3b8;
+    -fx-text-fill: #8ea3bf;
     -fx-font-size: 15px;
     -fx-padding: 18px 4px;
-}
-
-/* --------------------------------------------------------------------------
-   Photo Frame (Full-screen slideshow)
-   -------------------------------------------------------------------------- */
-.photo-frame-button {
-    -fx-background-color: rgba(56, 189, 248, 0.14);
-    -fx-border-color: rgba(56, 189, 248, 0.55);
-    -fx-background-radius: 34px;
-    -fx-border-radius: 34px;
-    -fx-border-width: 1.5px;
-    -fx-padding: 18px;
-    -fx-cursor: hand;
-}
-
-.photo-frame-button:hover {
-    -fx-background-color: rgba(56, 189, 248, 0.28);
-}
-
-.photo-frame-layer {
-    -fx-background-color: rgba(1, 4, 12, 0.97);
-}
-
-.photo-nav-zone {
-    -fx-background-color: transparent;
-}
-
-.photo-counter {
-    -fx-text-fill: rgba(226, 232, 240, 0.85);
-    -fx-font-size: 15px;
-    -fx-font-weight: 600;
-    -fx-background-color: rgba(13, 27, 52, 0.72);
-    -fx-border-color: rgba(148, 163, 184, 0.25);
-    -fx-border-width: 1px;
-    -fx-background-radius: 16px;
-    -fx-border-radius: 16px;
-    -fx-padding: 6px 18px;
-}
-
-.photo-close-btn {
-    -fx-font-size: 20px;
-    -fx-font-weight: bold;
-    -fx-text-fill: #cbd5e1;
-    -fx-padding: 10px 20px;
-    -fx-background-color: rgba(13, 27, 52, 0.72);
-    -fx-background-radius: 16px;
-    -fx-cursor: hand;
-}
-
-.photo-close-btn:hover {
-    -fx-background-color: rgba(239, 68, 68, 0.35);
 }
 
 /* --------------------------------------------------------------------------
@@ -589,8 +716,8 @@
 }
 
 .alarm-sheet-card {
-    -fx-background-color: rgba(13, 27, 52, 0.96);
-    -fx-border-color: rgba(148, 163, 184, 0.22);
+    -fx-background-color: rgba(13, 31, 58, 0.96);
+    -fx-border-color: rgba(147, 168, 196, 0.22);
     -fx-border-width: 1px;
     -fx-background-radius: 28px;
     -fx-border-radius: 28px;
@@ -604,21 +731,6 @@
     -fx-font-weight: 800;
 }
 
-.alarm-sheet-close {
-    -fx-font-size: 20px;
-    -fx-font-weight: bold;
-    -fx-text-fill: #cbd5e1;
-    -fx-padding: 8px 18px;
-    -fx-background-color: rgba(255, 255, 255, 0.07);
-    -fx-background-radius: 14px;
-    -fx-cursor: hand;
-}
-
-.alarm-sheet-close:hover {
-    -fx-background-color: rgba(239, 68, 68, 0.3);
-    -fx-text-fill: #ffffff;
-}
-
 .alarm-list-scroll {
     -fx-background-color: transparent;
     -fx-border-color: transparent;
@@ -629,30 +741,30 @@
 }
 
 .alarm-empty-hint {
-    -fx-text-fill: #64748b;
+    -fx-text-fill: #6b7f9c;
     -fx-font-size: 22px;
     -fx-padding: 8px 4px 0 4px;
 }
 
 .add-alarm-button {
-    -fx-text-fill: #06121f;
+    -fx-text-fill: #04202c;
     -fx-font-size: 26px;
     -fx-font-weight: bold;
-    -fx-background-color: linear-gradient(to bottom right, #38bdf8 0.0%, #0ea5e9 100.0%);
+    -fx-background-color: linear-gradient(to bottom right, #6fc7ef 0.0%, #0ea5e9 100.0%);
     -fx-background-radius: 22px;
     -fx-padding: 18px 44px;
     -fx-cursor: hand;
-    -fx-effect: dropshadow(gaussian, rgba(56, 189, 248, 0.35), 18, 0, 0, 5);
+    -fx-effect: dropshadow(gaussian, rgba(111, 199, 239, 0.35), 18, 0, 0, 5);
 }
 
 .add-alarm-button:hover {
-    -fx-background-color: linear-gradient(to bottom right, #7dd3fc 0.0%, #38bdf8 100.0%);
+    -fx-background-color: linear-gradient(to bottom right, #a9dff6 0.0%, #6fc7ef 100.0%);
 }
 
 /* Rows inside the alarm list (built in code) */
 .alarm-row {
     -fx-background-color: rgba(255, 255, 255, 0.045);
-    -fx-border-color: rgba(148, 163, 184, 0.16);
+    -fx-border-color: rgba(147, 168, 196, 0.16);
     -fx-border-width: 1px;
     -fx-background-radius: 20px;
     -fx-border-radius: 20px;
@@ -670,50 +782,50 @@
 }
 
 .alarm-row-desc {
-    -fx-text-fill: #8ba1bd;
+    -fx-text-fill: #93a8c4;
     -fx-font-size: 19px;
     -fx-font-weight: 600;
 }
 
 .toggle-pill-on {
-    -fx-text-fill: #05261a;
+    -fx-text-fill: #04231a;
     -fx-font-size: 17px;
     -fx-font-weight: 800;
-    -fx-background-color: #34d399;
+    -fx-background-color: #63d6a4;
     -fx-background-radius: 16px;
     -fx-padding: 10px 24px;
     -fx-cursor: hand;
 }
 
 .toggle-pill-off {
-    -fx-text-fill: #cbd5e1;
+    -fx-text-fill: #c6d4e7;
     -fx-font-size: 17px;
     -fx-font-weight: 800;
-    -fx-background-color: rgba(148, 163, 184, 0.22);
+    -fx-background-color: rgba(147, 168, 196, 0.22);
     -fx-background-radius: 16px;
     -fx-padding: 10px 24px;
     -fx-cursor: hand;
 }
 
 .alarm-delete-btn {
-    -fx-text-fill: #f87171;
+    -fx-text-fill: #fb9a9a;
     -fx-font-size: 22px;
     -fx-font-weight: bold;
-    -fx-background-color: rgba(239, 68, 68, 0.13);
+    -fx-background-color: rgba(248, 122, 122, 0.13);
     -fx-background-radius: 16px;
     -fx-padding: 10px 20px;
     -fx-cursor: hand;
 }
 
 .alarm-delete-btn:hover {
-    -fx-background-color: rgba(239, 68, 68, 0.32);
-    -fx-text-fill: #fecaca;
+    -fx-background-color: rgba(248, 122, 122, 0.32);
+    -fx-text-fill: #ffd9d9;
 }
 
 /* Editor inside the sheet */
 .alarm-editor-pane {
     -fx-background-color: rgba(255, 255, 255, 0.04);
-    -fx-border-color: rgba(56, 189, 248, 0.3);
+    -fx-border-color: rgba(111, 199, 239, 0.3);
     -fx-border-width: 1px;
     -fx-background-radius: 18px;
     -fx-border-radius: 18px;
@@ -721,29 +833,29 @@
 }
 
 .alarm-editor-preview {
-    -fx-text-fill: #38bdf8;
+    -fx-text-fill: #6fc7ef;
     -fx-font-size: 56px;
     -fx-font-weight: 800;
 }
 
 .alarm-stepper-caption {
-    -fx-text-fill: #8ba1bd;
+    -fx-text-fill: #93a8c4;
     -fx-font-size: 15px;
     -fx-font-weight: 700;
 }
 
 .stepper-button {
-    -fx-text-fill: #e2e8f0;
+    -fx-text-fill: #dbe6f5;
     -fx-font-size: 24px;
     -fx-font-weight: 800;
-    -fx-background-color: rgba(148, 163, 184, 0.18);
+    -fx-background-color: rgba(147, 168, 196, 0.18);
     -fx-background-radius: 14px;
     -fx-padding: 4px 24px;
     -fx-cursor: hand;
 }
 
 .stepper-button:hover {
-    -fx-background-color: rgba(56, 189, 248, 0.32);
+    -fx-background-color: rgba(111, 199, 239, 0.32);
 }
 
 .stepper-value {
@@ -756,11 +868,11 @@
 
 /* Repeat mode selector: "Solo una vez" vs "Repetir" */
 .alarm-mode-button {
-    -fx-text-fill: #cbd5e1;
+    -fx-text-fill: #c6d4e7;
     -fx-font-size: 17px;
     -fx-font-weight: 700;
-    -fx-background-color: rgba(148, 163, 184, 0.12);
-    -fx-border-color: rgba(148, 163, 184, 0.28);
+    -fx-background-color: rgba(147, 168, 196, 0.12);
+    -fx-border-color: rgba(147, 168, 196, 0.28);
     -fx-border-width: 1px;
     -fx-background-radius: 14px;
     -fx-border-radius: 14px;
@@ -769,11 +881,11 @@
 }
 
 .alarm-mode-button-selected {
-    -fx-text-fill: #05261a;
+    -fx-text-fill: #04231a;
     -fx-font-size: 17px;
     -fx-font-weight: 800;
-    -fx-background-color: #34d399;
-    -fx-border-color: #34d399;
+    -fx-background-color: #63d6a4;
+    -fx-border-color: #63d6a4;
     -fx-border-width: 1px;
     -fx-background-radius: 14px;
     -fx-border-radius: 14px;
@@ -782,10 +894,10 @@
 }
 
 .day-chip {
-    -fx-text-fill: #8ba1bd;
+    -fx-text-fill: #93a8c4;
     -fx-font-size: 16px;
     -fx-font-weight: 700;
-    -fx-background-color: rgba(148, 163, 184, 0.12);
+    -fx-background-color: rgba(147, 168, 196, 0.12);
     -fx-background-radius: 50%;
     -fx-border-radius: 50%;
     -fx-padding: 0px;
@@ -796,42 +908,42 @@
 }
 
 .day-chip-selected {
-    -fx-text-fill: #06121f;
-    -fx-background-color: #38bdf8;
+    -fx-text-fill: #04202c;
+    -fx-background-color: #6fc7ef;
 }
 
 .alarm-days-hint {
-    -fx-text-fill: #64748b;
+    -fx-text-fill: #6b7f9c;
     -fx-font-size: 14px;
 }
 
 .alarm-editor-cancel {
-    -fx-text-fill: #cbd5e1;
+    -fx-text-fill: #c6d4e7;
     -fx-font-size: 19px;
     -fx-font-weight: bold;
-    -fx-background-color: rgba(148, 163, 184, 0.16);
+    -fx-background-color: rgba(147, 168, 196, 0.16);
     -fx-background-radius: 14px;
     -fx-padding: 11px 32px;
     -fx-cursor: hand;
 }
 
 .alarm-editor-cancel:hover {
-    -fx-text-fill: #e2e8f0;
-    -fx-background-color: rgba(148, 163, 184, 0.28);
+    -fx-text-fill: #dbe6f5;
+    -fx-background-color: rgba(147, 168, 196, 0.28);
 }
 
 .alarm-editor-save {
-    -fx-text-fill: #05261a;
+    -fx-text-fill: #04231a;
     -fx-font-size: 19px;
     -fx-font-weight: 800;
-    -fx-background-color: #34d399;
+    -fx-background-color: #63d6a4;
     -fx-background-radius: 14px;
     -fx-padding: 11px 40px;
     -fx-cursor: hand;
 }
 
 .alarm-editor-save:hover {
-    -fx-background-color: #6ee7b7;
+    -fx-background-color: #8ce4bd;
 }
 
 /* --------------------------------------------------------------------------
@@ -841,18 +953,14 @@
 .alarm-ring-background {
     -fx-background-color:
         radial-gradient(focus-angle 0.0deg, focus-distance 0.0%, center 85.0% 95.0%, radius 55.0%,
-            rgba(251, 146, 60, 0.10) 0.0%, transparent 62.0%),
+            rgba(240, 168, 110, 0.10) 0.0%, transparent 62.0%),
         radial-gradient(focus-angle 0.0deg, focus-distance 0.0%, center 50.0% 40.0%, radius 100.0%,
-            #4c1d95 0.0%, #1e1b4b 45.0%, #050d18 100.0%);
+            #3d2472 0.0%, #241a44 45.0%, #040b16 100.0%);
 }
 
 .alarm-glow {
     -fx-background-color: radial-gradient(focus-angle 0.0deg, focus-distance 0.0%, center 50.0% 42.0%, radius 55.0%,
-        rgba(251, 146, 60, 0.35) 0.0%, rgba(251, 113, 133, 0.12) 55.0%, transparent 100.0%);
-}
-
-.alarm-ring-icon {
-    -fx-font-size: 84px;
+        rgba(240, 168, 110, 0.35) 0.0%, rgba(240, 130, 140, 0.12) 55.0%, transparent 100.0%);
 }
 
 .alarm-ring-time {
@@ -863,18 +971,17 @@
 }
 
 .alarm-ring-title {
-    -fx-text-fill: #fdba74;
+    -fx-text-fill: #f7cf9c;
     -fx-font-size: 28px;
     -fx-font-weight: 700;
-    -fx-letter-spacing: 1px;
 }
 
 .alarm-snooze-button {
-    -fx-text-fill: #fef3c7;
+    -fx-text-fill: #fdefd8;
     -fx-font-size: 25px;
     -fx-font-weight: bold;
-    -fx-background-color: rgba(245, 158, 11, 0.26);
-    -fx-border-color: rgba(245, 158, 11, 0.65);
+    -fx-background-color: rgba(240, 178, 94, 0.26);
+    -fx-border-color: rgba(240, 178, 94, 0.65);
     -fx-border-width: 1.5px;
     -fx-background-radius: 50px;
     -fx-border-radius: 50px;
@@ -883,7 +990,7 @@
 }
 
 .alarm-snooze-button:hover {
-    -fx-background-color: rgba(245, 158, 11, 0.42);
+    -fx-background-color: rgba(240, 178, 94, 0.42);
 }
 
 /* --------------------------------------------------------------------------
@@ -903,22 +1010,18 @@
 
 .spotify-art-placeholder {
     -fx-font-size: 64px;
-    -fx-text-fill: #333d47;
+    -fx-text-fill: #2c3d52;
 }
 
 .spotify-intro-backdrop {
     -fx-background-color: rgba(0, 0, 0, 0.88);
 }
 
-.alarm-sheet-header-icon {
-    -fx-font-size: 24px;
-}
-
 .alarm-dismiss-button {
-    -fx-text-fill: #05261a;
+    -fx-text-fill: #04231a;
     -fx-font-size: 25px;
     -fx-font-weight: 800;
-    -fx-background-color: #34d399;
+    -fx-background-color: #63d6a4;
     -fx-background-radius: 50px;
     -fx-border-radius: 50px;
     -fx-padding: 22px 62px;
@@ -926,7 +1029,7 @@
 }
 
 .alarm-dismiss-button:hover {
-    -fx-background-color: #6ee7b7;
+    -fx-background-color: #8ce4bd;
 }
 
 /* --------------------------------------------------------------------------

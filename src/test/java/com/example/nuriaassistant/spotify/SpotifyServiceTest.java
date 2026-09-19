@@ -11,6 +11,8 @@ import se.michaelthelin.spotify.model_objects.specification.Image;
 import se.michaelthelin.spotify.model_objects.specification.ShowSimplified;
 import se.michaelthelin.spotify.model_objects.specification.Track;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -138,6 +140,32 @@ public class SpotifyServiceTest {
         assertEquals("The Daily", spotifyService.getArtistName(currentlyPlaying));
         assertEquals("https://img.spotify.com/podcast", spotifyService.getAlbumCoverUrl(currentlyPlaying));
         assertEquals("The Daily", spotifyService.getAlbumName(currentlyPlaying));
+    }
+
+    @Test
+    void testAuthorizationUriUsesConfiguredRedirectByDefault() throws Exception {
+        String url = spotifyService.getAuthorizationUri();
+
+        assertTrue(url.startsWith("https://accounts.spotify.com"), url);
+        assertTrue(url.contains("/authorize?"), url);
+        assertTrue(url.contains("client_id=test-client-id"), url);
+        assertTrue(url.contains("response_type=code"), url);
+        assertTrue(url.contains("redirect_uri=http%3A%2F%2F127.0.0.1%3A8888%2Fcallback"), url);
+        assertFalse(url.contains("state="), "no state unless the phone flow asks for it");
+    }
+
+    @Test
+    void testAuthorizationUriCarriesRelayRedirectAndPairingState() throws Exception {
+        String relay = "https://hcaroli381.github.io/NuriaAssistant/spotify-callback.html";
+        String state = new SpotifyPairing.State("tok123", "192.168.1.50", 8888).encode();
+
+        String url = spotifyService.getAuthorizationUri(relay, state);
+
+        assertTrue(url.startsWith("https://accounts.spotify.com"), url);
+        assertTrue(url.contains("/authorize?"), url);
+        assertTrue(url.contains("redirect_uri=" + URLEncoder.encode(relay, StandardCharsets.UTF_8)), url);
+        assertTrue(url.contains("state=" + state), url);
+        assertFalse(url.contains("127.0.0.1"), "the loopback URI must not leak into the phone flow: " + url);
     }
 
     @Test

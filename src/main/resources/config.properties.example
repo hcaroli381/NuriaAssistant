@@ -4,7 +4,14 @@ OPENWEATHER_CITY=Granada,ES
 
 SPOTIFY_CLIENT_ID=
 SPOTIFY_CLIENT_SECRET=
+# Desktop/loopback fallback (the only plain-http redirect Spotify still accepts).
 SPOTIFY_REDIRECT_URI=http://127.0.0.1:8888/callback
+# HTTPS bounce page used by the phone QR login (see docs/spotify-callback.html).
+# Whitelist the exact URL as a Redirect URI in the Spotify Developer Dashboard.
+SPOTIFY_RELAY_URL=https://hcaroli381.github.io/NuriaAssistant/spotify-callback.html
+
+# Optional: name Alpha greets on the alarm screen (default: Nuria)
+OWNER_NAME=Nuria
 
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_ALLOWED_CHAT_ID=

@@ -55,14 +55,33 @@ public class ThemeManagerTest {
     void testDateFormattingShowsDayAndMonth() {
         LocalDateTime date = LocalDateTime.of(2026, Month.AUGUST, 20, 14, 54, 30);
         String formattedDate = ThemeManager.formatDate(date);
-        assertEquals("Thursday, 20 August", formattedDate);
+        assertEquals("Jueves, 20 de agosto", formattedDate);
 
         String fullDate = ThemeManager.formatFullDate(date);
-        assertEquals("Thursday, 20 August 2026", fullDate);
+        assertEquals("Jueves, 20 de agosto de 2026", fullDate);
 
         LocalDateTime newYears = LocalDateTime.of(2027, Month.JANUARY, 1, 0, 0, 0);
-        assertEquals("Friday, 1 January", ThemeManager.formatDate(newYears));
-        assertEquals("Friday, 1 January 2027", ThemeManager.formatFullDate(newYears));
+        assertEquals("Viernes, 1 de enero", ThemeManager.formatDate(newYears));
+        assertEquals("Viernes, 1 de enero de 2027", ThemeManager.formatFullDate(newYears));
+    }
+
+    @Test
+    void testGreetingFollowsTheDayAndTheName() {
+        assertEquals("Buenos días, Nuria",
+                ThemeManager.greeting(LocalDateTime.of(2026, Month.AUGUST, 20, 7, 30), "Nuria"));
+        assertEquals("Buenas tardes, Nuria",
+                ThemeManager.greeting(LocalDateTime.of(2026, Month.AUGUST, 20, 17, 0), "Nuria"));
+        assertEquals("Buenas noches, Nuria",
+                ThemeManager.greeting(LocalDateTime.of(2026, Month.AUGUST, 20, 23, 0), "Nuria"));
+        assertEquals("Buenas noches, Nuria",
+                ThemeManager.greeting(LocalDateTime.of(2026, Month.AUGUST, 20, 4, 0), "Nuria"));
+
+        // No name configured: she still greets, just without addressing anyone.
+        assertEquals("Buenos días",
+                ThemeManager.greeting(LocalDateTime.of(2026, Month.AUGUST, 20, 8, 0), null));
+        assertEquals("Buenos días",
+                ThemeManager.greeting(LocalDateTime.of(2026, Month.AUGUST, 20, 8, 0), "  "));
+        assertEquals("", ThemeManager.greeting(null, "Nuria"));
     }
 
     @Test
