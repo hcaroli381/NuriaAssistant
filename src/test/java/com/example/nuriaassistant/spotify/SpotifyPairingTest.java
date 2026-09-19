@@ -99,6 +99,27 @@ public class SpotifyPairingTest {
         assertTrue(SpotifyPairing.isValidSingleHost(host));
     }
 
+    /**
+     * The bounce page is deployed separately from the jar, so the two can drift
+     * silently: a renamed path or separator would turn into "nothing happens"
+     * on her phone with no error anywhere.
+     */
+    @Test
+    void deployedBouncePageAgreesWithThePiOnPathsAndSeparators() throws Exception {
+        java.nio.file.Path page = java.nio.file.Path.of("docs", "spotify-callback.html");
+        assertTrue(java.nio.file.Files.exists(page), "the bounce page must ship in docs/");
+
+        String html = java.nio.file.Files.readString(page);
+        assertTrue(html.contains(SpotifyPairing.CALLBACK_PATH),
+                "page must hand the code back to " + SpotifyPairing.CALLBACK_PATH);
+        assertTrue(html.contains("'" + SpotifyPairing.SEPARATOR + "'"),
+                "page must split state on " + SpotifyPairing.SEPARATOR);
+
+        String landing = java.nio.file.Files.readString(java.nio.file.Path.of("docs", "index.html"));
+        assertTrue(landing.contains("spotify-callback.html"),
+                "the Pages landing page must point at the URI to whitelist");
+    }
+
     @Test
     void resolveHostsKeepsMdnsAsFallbackBehindTheLanAddress() {
         String hosts = SpotifyPairing.resolveHosts();
