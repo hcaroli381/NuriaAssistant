@@ -158,7 +158,30 @@
             alt.textContent = 'Intentar por ' + hosts[1];
             alt.classList.remove('hidden');
         }
-        window.setTimeout(function () { window.location.replace(targets[0]); }, 700);
+
+        // Walk through the candidates: iOS can drop a navigation from a public
+        // https page to a private address (Local Network permission) and leave
+        // the user staring at this screen, which looks exactly like a dead end.
+        // If the page is still alive a few seconds after an attempt, the
+        // navigation went nowhere, so try the next candidate and then explain.
+        let attempt = 0;
+        let done = false;
+        window.addEventListener('pageshow', function (e) {
+            if (e.persisted) { done = true; }  // back button: stop re-navigating
+        });
+
+        function tryNext() {
+            if (done || attempt >= targets.length) {
+                done = true;
+                stop('Toca para conectar',
+                    'Tu móvil tiene que estar en la misma WiFi que Alpha. Si al tocar el botón no pasa nada, ' +
+                    'acepta el aviso de Safari sobre «dispositivos en tu red local».', '📶');
+                return;
+            }
+            window.location.replace(targets[attempt++]);
+            window.setTimeout(tryNext, 4500);
+        }
+        window.setTimeout(tryNext, 700);
     })();
 </script>
 </body>
