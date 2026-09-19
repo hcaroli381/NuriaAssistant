@@ -309,6 +309,9 @@ public class AssistantController {
     @FXML
     private Label spotifyAuthStatusLabel;
 
+    @FXML
+    private Label spotifyAuthEndpointLabel;
+
     // Personal touches
     private String ownerName = "Nuria";
 
@@ -525,6 +528,8 @@ public class AssistantController {
             Log.info("Controller", "Spotify service initialized.");
             if (spotifyRelayUrl != null) {
                 Log.info("Controller", "Spotify phone pairing via " + spotifyRelayUrl);
+                Log.info("Controller", "Spotify phone reachability probe: http://" + SpotifyPairing.resolveHost()
+                        + ":" + SpotifyPairing.CALLBACK_PORT + SpotifyPairing.PING_PATH);
             }
 
             // Embedded OAuth callback server on port 8888 (accepts phone callbacks too)
@@ -996,6 +1001,12 @@ public class AssistantController {
                 spotifyAuthStatusLabel.setText("Esperando al m\u00f3vil...");
                 spotifyAuthStatusLabel.setStyle(null);
             }
+            if (spotifyAuthEndpointLabel != null) {
+                String host = SpotifyPairing.resolveHost();
+                spotifyAuthEndpointLabel.setText("Tu m\u00f3vil enviar\u00e1 el permiso a Alpha en "
+                        + host + ":" + SpotifyPairing.CALLBACK_PORT
+                        + " \u2014 necesita estar en la misma WiFi que Alpha.");
+            }
         } catch (Exception e) {
             Log.error("Controller", "Failed to generate Spotify Auth URL: " + e.getMessage());
             if (spotifyAuthStatusLabel != null) {
@@ -1012,12 +1023,13 @@ public class AssistantController {
      */
     private String newPairingState() {
         previousPairingToken = pairingToken;
-        pairingToken = SpotifyPairing.newToken();
         if (spotifyRelayUrl == null) {
+            pairingToken = SpotifyPairing.newToken();
             return pairingToken;
         }
-        return new SpotifyPairing.State(pairingToken, SpotifyPairing.resolveHost(),
-                SpotifyPairing.CALLBACK_PORT).encode();
+        SpotifyPairing.State state = SpotifyPairing.newState();
+        pairingToken = state.token();
+        return state.encode();
     }
 
     /** True when a callback state carries a token issued by this app. */

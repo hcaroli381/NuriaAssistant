@@ -94,15 +94,20 @@ works — the flow needs one fixed HTTPS URL that does not depend on the network
 ```
 phone ─ scan QR ─► accounts.spotify.com/authorize
                      redirect_uri = SPOTIFY_RELAY_URL   (HTTPS, whitelisted once)
-                     state        = <token>~<PI_LAN_IP>~8888
+                     state        = <token>~<PI_LAN_IP>,alpha.local~8888
                          │
                          ▼
    https://<you>.github.io/NuriaAssistant/spotify-callback.html
-     reads the Pi's address out of `state`, then navigates the phone to
+     reads the Pi's addresses out of `state`, then navigates the phone to
                          │
                          ▼
    http://<PI_LAN_IP>:8888/callback?code=…&state=…   (Pi, over the LAN)
 ```
+
+The state's host field is a **list of candidates** (comma-separated, best
+first): the detected LAN IPv4 plus the mDNS name, so a Pi whose DHCP lease
+changed since the QR was drawn is still reachable — the page offers the second
+candidate as an "Intentar por alpha.local" link.
 
 1. On startup (or via the green Spotify icon button next to the alarm clock button), if no valid session exists the app shows a full-screen sheet with a **QR code encoding the OAuth authorize URL** (`SpotifyQrGenerator`, ZXing core — pure Java).
 2. She scans it with the iPhone camera → the Spotify accounts page opens in the phone browser → she logs in with her account.
@@ -111,7 +116,12 @@ phone ─ scan QR ─► accounts.spotify.com/authorize
 5. The sheet closes itself and Alpha confirms with a speech bubble ("✅ Spotify conectado").
 
 - **One-time provisioning:** enable GitHub Pages on this repo (`Settings → Pages → Deploy from branch → main /docs`), whitelist the resulting URL (`https://<you>.github.io/NuriaAssistant/spotify-callback.html`) under **Redirect URIs** in the Spotify Developer Dashboard, and put the same URL in `SPOTIFY_RELAY_URL`. Nothing else is required — no LAN address to update, no per-network config.
+- `docs/index.html` is the Pages landing page (root URL): it restates the exact URI to whitelist and the two-step troubleshooting below, so the site never answers 404 to whoever opens it. `docs/.nojekyll` keeps GitHub from running Jekyll over the folder.
 - The bounce page only ever navigates to a private address: `state` is validated against an IPv4/`.local` pattern, so a crafted link cannot redirect someone anywhere else.
+- **Diagnosing "nothing happens"** — the two hops fail in very different places, so each one is observable:
+  1. Phone → Pi over the LAN: open `http://<PI_LAN_IP>:8888/ping` (printed at startup as `Spotify phone reachability probe: …`, and shown under the QR). A page answering *"Alpha te oye"* proves the network; a timeout means the phone is on another network (mobile data, guest Wi-Fi, AP isolation).
+  2. Spotify → bounce page: a missing/wrong Dashboard entry never reaches the phone browser as a 404 — Spotify refuses to redirect at all and shows `INVALID_CLIENT: Invalid redirect URI` on its own page. Compare the URI there against the QR sheet's `Spotify Auth URL` log line (and against `SPOTIFY_RELAY_URL`) character by character.
+  - Every incoming hit is logged: `OAuth callback from /<ip> (code=…, state=…, error=…)` followed by `OAuth callback accepted|rejected.` If the app logs nothing, hop 2 never happened.
 - `SPOTIFY_RELAY_URL` may be empty: without it the app falls back to the loopback `SPOTIFY_REDIRECT_URI` (`http://127.0.0.1:8888/callback`), which still works for desktop development but not from a phone.
 - Tokens persist at `~/.alpha/spotify-tokens.json` (`accessToken` / `refreshToken` / `expiresAtEpochMs`, atomic writes). On every boot the app silently refreshes the access token; only a revoked/expired refresh token clears the store and brings the QR back.
 - A rejected code regenerates the QR automatically; failures set the status label red without leaving the sheet.
@@ -170,7 +180,7 @@ phone ─ scan QR ─► accounts.spotify.com/authorize
 - `src/main/java/com/example/nuriaassistant/spotify/SpotifyService.java`: Spotify Web API & OAuth2 integration.
 - `src/main/java/com/example/nuriaassistant/spotify/SpotifyTokenStore.java`: Token persistence (`~/.alpha/spotify-tokens.json`, atomic writes).
 - `src/main/java/com/example/nuriaassistant/spotify/SpotifyQrGenerator.java`: ZXing wrapper that encodes the authorize URL as a QR BitMatrix.
-- `src/main/java/com/example/nuriaassistant/spotify/SpotifyPairing.java`: OAuth `state` encoding (`token~host~port`, parsed/validated), LAN IPv4 detection and the loopback/mDNS fallbacks.
+- `src/main/java/com/example/nuriaassistant/spotify/SpotifyPairing.java`: OAuth `state` encoding (`token~hosts~port`, parsed/validated, host candidates comma-separated), LAN IPv4 detection, the mDNS fallback and the `/ping` reachability probe path.
 - `docs/spotify-callback.html`: static GitHub Pages bounce page — the single whitelisted HTTPS redirect URI; hands the code back to the Pi over the LAN.
 - `src/main/java/com/example/nuriaassistant/ui/Fonts.java` + `src/main/resources/.../fonts/`: Space Grotesk (OFL) faces bundled in the jar.
 - `src/main/java/com/example/nuriaassistant/ui/WeatherUi.java`: condition → shape-built glyph mapping for the home weather row.

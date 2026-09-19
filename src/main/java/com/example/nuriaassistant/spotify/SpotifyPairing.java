@@ -7,7 +7,10 @@ import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.security.SecureRandom;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
+import java.util.regex.Pattern;
 
 /**
  * Phone-to-Pi handoff for the Spotify QR login.
@@ -22,6 +25,11 @@ import java.util.Collections;
  * <pre>
  *   state = &lt;random token&gt; ~ &lt;host&gt; ~ &lt;port&gt;
  * </pre>
+ *
+ * <p>The host field holds one or more candidates (comma-separated, best
+ * first): the detected LAN IPv4 and the mDNS name. A Pi that changed address
+ * after the QR was drawn is still reachable through the second candidate, so
+ * the bounce page can offer it as a fallback link.
  */
 public final class SpotifyPairing {
 
@@ -33,6 +41,20 @@ public final class SpotifyPairing {
 
     /** Callback path handled by {@code SpotifyService#startAuthCallbackServer}. */
     public static final String CALLBACK_PATH = "/callback";
+
+    /**
+     * Reachability probe served by the callback server. Opening
+     * {@code http://<pi>:8888/ping} on the phone answers "can the phone see the
+     * Pi at all?" without involving Spotify — the fastest way to tell a
+     * network problem from a Spotify/Dashboard one.
+     */
+    public static final String PING_PATH = "/ping";
+
+    /** Separator between host candidates inside the state's host field. */
+    public static final String HOST_SEPARATOR = ",";
+
+    /** Maximum number of host candidates accepted in a state. */
+    private static final int MAX_HOSTS = 4;
 
     /** Used when the LAN address cannot be detected (Avahi/mDNS name). */
     public static final String MDNS_FALLBACK_HOST = "alpha.local";
@@ -51,15 +73,41 @@ public final class SpotifyPairing {
             return token + SEPARATOR + host + SEPARATOR + port;
         }
 
+        /** Host candidates in try order (never empty for a valid state). */
+        public List<String> hosts() {
+            return hostsOf(host);
+        }
+
+        /** The first (best) host candidate. */
+        public String primaryHost() {
+            List<String> candidates = hosts();
+            return candidates.isEmpty() ? host : candidates.get(0);
+        }
+
         /** The URL the bounce page sends the phone to. */
         public String callbackUrl() {
-            return "http://" + host + ":" + port + CALLBACK_PATH;
+            return "http://" + primaryHost() + ":" + port + CALLBACK_PATH;
         }
     }
 
     /** A fresh random pairing state pointing at this Pi. */
     public static State newState() {
-        return new State(newToken(), resolveHost(), CALLBACK_PORT);
+        return new State(newToken(), resolveHosts(), CALLBACK_PORT);
+    }
+
+    /** Splits a state host field into its trimmed candidates. */
+    public static List<String> hostsOf(String hostField) {
+        List<String> candidates = new ArrayList<>();
+        if (hostField == null) {
+            return candidates;
+        }
+        for (String candidate : hostField.split(Pattern.quote(HOST_SEPARATOR))) {
+            String trimmed = candidate.trim();
+            if (!trimmed.isEmpty()) {
+                candidates.add(trimmed);
+            }
+        }
+        return candidates;
     }
 
     /** URL-safe random token (no state guessing from the phone's page). */
@@ -97,8 +145,16 @@ public final class SpotifyPairing {
         }
     }
 
+    /** True for a valid host field: one or more LAN candidates, never an external host. */
+    public static boolean isValidHost(String hostField) {
+        List<String> candidates = hostsOf(hostField);
+        return !candidates.isEmpty()
+                && candidates.size() <= MAX_HOSTS
+                && candidates.stream().allMatch(SpotifyPairing::isValidSingleHost);
+    }
+
     /** True for IPv4 literals and mDNS names — never an arbitrary external host. */
-    public static boolean isValidHost(String host) {
+    public static boolean isValidSingleHost(String host) {
         if (host == null || host.isBlank() || host.length() > 253) {
             return false;
         }
@@ -114,17 +170,26 @@ public final class SpotifyPairing {
     }
 
     /**
+     * Host candidates for the phone, best first: the detected LAN address when
+     * there is one, plus the mDNS name so a Pi whose DHCP lease changed is
+     * still reachable from the bounce page's fallback link.
+     */
+    public static String resolveHosts() {
+        String detected = detectLanIpv4();
+        if (detected == null) {
+            Log.info("Spotify", "SpotifyPairing: no LAN IPv4 detected, falling back to " + MDNS_FALLBACK_HOST);
+            return MDNS_FALLBACK_HOST;
+        }
+        return detected + HOST_SEPARATOR + MDNS_FALLBACK_HOST;
+    }
+
+    /**
      * LAN address of this Pi, or the mDNS name when no address can be resolved.
      * The default-route probe opens no connection: connecting a UDP socket only
      * asks the OS which local interface would be used.
      */
     public static String resolveHost() {
-        String detected = detectLanIpv4();
-        if (detected != null) {
-            return detected;
-        }
-        Log.info("Spotify", "SpotifyPairing: no LAN IPv4 detected, falling back to " + MDNS_FALLBACK_HOST);
-        return MDNS_FALLBACK_HOST;
+        return hostsOf(resolveHosts()).get(0);
     }
 
     /** Best-effort LAN IPv4: default-route interface first, then any site-local one. */

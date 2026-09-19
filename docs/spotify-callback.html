@@ -58,6 +58,15 @@
             font-weight: 700;
             text-decoration: none;
         }
+        a.alt {
+            display: block;
+            margin-top: 12px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #9fb3d1;
+            text-decoration: underline;
+            text-underline-offset: 3px;
+        }
         .fine { margin-top: 18px; font-size: 13px; color: #7d93b5; line-height: 1.5; }
         .hidden { display: none; }
     </style>
@@ -69,6 +78,7 @@
     <h1 id="title">Un segundo…</h1>
     <p id="message">Estoy recibiendo la confirmación de Spotify.</p>
     <a class="go hidden" id="go" href="#">Volver a Alpha</a>
+    <a class="alt hidden" id="alt" href="#">¿Sigue sin responder?</a>
     <p class="fine hidden" id="fine">Si no vuelve sola, toca el botón.</p>
 </div>
 
@@ -87,6 +97,7 @@
         const message = document.getElementById('message');
         const ring = document.getElementById('ring');
         const go = document.getElementById('go');
+        const alt = document.getElementById('alt');
         const fine = document.getElementById('fine');
 
         function stop(titleText, bodyText, icon) {
@@ -95,18 +106,24 @@
             message.textContent = bodyText;
         }
 
-        // state = <token> ~ <host> ~ <port>; the host must be a private name or
-        // IPv4 literal so a crafted link can never bounce somewhere foreign.
+        // state = <token> ~ <hosts> ~ <port>; every host must be a private name
+        // or IPv4 literal so a crafted link can never bounce somewhere foreign.
+        // Hosts are comma-separated candidates, best first: the Pi's LAN address
+        // followed by its mDNS name, so a changed DHCP lease still works.
         const ipv4 = /^(?:\d{1,3}\.){3}\d{1,3}$/;
         const mdns = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.local$/i;
         const parts = state.split('~');
-        const host = parts.length === 3 ? parts[1] : '';
+        const hosts = (parts.length === 3 ? parts[1] : '')
+            .split(',').map(function (h) { return h.trim(); }).filter(Boolean);
         const port = parts.length === 3 ? parseInt(parts[2], 10) : NaN;
 
-        const hostOk = ipv4.test(host)
-            ? host.split('.').every(function (n) { return parseInt(n, 10) <= 255; })
-            : mdns.test(host);
-        const stateOk = parts.length === 3 && hostOk && port >= 1 && port <= 65535;
+        function hostOk(h) {
+            return ipv4.test(h)
+                ? h.split('.').every(function (n) { return parseInt(n, 10) <= 255; })
+                : mdns.test(h);
+        }
+        const stateOk = parts.length === 3 && hosts.length > 0 && hosts.length <= 4
+            && hosts.every(hostOk) && port >= 1 && port <= 65535;
 
         if (error) {
             stop('Has cancelado el acceso', 'Alpha no se ha conectado a Spotify. Vuelve a escanear el código de la pantalla.', '🙈');
@@ -121,17 +138,27 @@
             return;
         }
 
-        const target = 'http://' + host + ':' + port + '/callback?code='
-            + encodeURIComponent(code) + '&state=' + encodeURIComponent(state);
+        function targetFor(h) {
+            return 'http://' + h + ':' + port + '/callback?code='
+                + encodeURIComponent(code) + '&state=' + encodeURIComponent(state);
+        }
+        const targets = hosts.map(targetFor);
 
         // Keep the authorization code out of the address bar / history.
         try { history.replaceState(null, '', window.location.pathname); } catch (e) { }
 
         stop('Ya casi está', 'Enviando la confirmación a Alpha…', '🎧');
-        go.href = target;
+        go.href = targets[0];
         go.classList.remove('hidden');
         fine.classList.remove('hidden');
-        window.setTimeout(function () { window.location.replace(target); }, 400);
+        if (targets.length > 1) {
+            // The Pi may have moved to a different address since the QR was
+            // drawn; its mDNS name does not depend on a DHCP lease.
+            alt.href = targets[1];
+            alt.textContent = 'Intentar por ' + hosts[1];
+            alt.classList.remove('hidden');
+        }
+        window.setTimeout(function () { window.location.replace(targets[0]); }, 700);
     })();
 </script>
 </body>

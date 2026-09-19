@@ -78,6 +78,24 @@ public class SpotifyCallbackServerTest {
         }
     }
 
+    /** The reachability probe: answers without Spotify and without a code. */
+    @Test
+    void pingConfirmsThePhoneCanReachThePi() throws Exception {
+        SpotifyService service = new SpotifyService("id", "secret", "http://127.0.0.1:8888/callback");
+        int port = freePort();
+
+        service.startAuthCallbackServer(callback -> false, port);
+        try {
+            HttpResponse<String> response = get("http://127.0.0.1:" + port + SpotifyPairing.PING_PATH);
+
+            assertEquals(200, response.statusCode());
+            assertTrue(response.body().contains("ALPHA"));
+            assertTrue(response.body().contains("se ven en la red local"));
+        } finally {
+            service.stopAuthCallbackServer();
+        }
+    }
+
     @Test
     void rejectsWhenTheAppRefusesTheState() throws Exception {
         SpotifyService service = new SpotifyService("id", "secret", "http://127.0.0.1:8888/callback");

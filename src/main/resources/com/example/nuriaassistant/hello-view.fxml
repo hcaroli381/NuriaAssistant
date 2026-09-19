@@ -410,6 +410,13 @@
             <Label fx:id="spotifyAuthStatusLabel"
                    text="Esperando conexi&#243;n..."
                    styleClass="spotify-auth-status"/>
+
+            <!-- LAN endpoint the phone must reach: makes a "nothing happens"
+                 failure diagnosable at a glance (wrong network vs wrong IP). -->
+            <Label fx:id="spotifyAuthEndpointLabel"
+                   text=""
+                   wrapText="true" textAlignment="CENTER"
+                   styleClass="spotify-auth-endpoint"/>
         </VBox>
     </AnchorPane>
 

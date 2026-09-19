@@ -72,10 +72,40 @@ public class SpotifyPairingTest {
     }
 
     @Test
+    void hostFieldAcceptsCandidateListsButNeverForeignHosts() {
+        assertTrue(SpotifyPairing.isValidHost("192.168.1.50,alpha.local"));
+        assertTrue(SpotifyPairing.isValidHost("192.168.1.50, alpha.local"));
+
+        assertFalse(SpotifyPairing.isValidHost(","), "empty candidates");
+        assertFalse(SpotifyPairing.isValidHost("192.168.1.50,evil.example.com"), "one bad candidate poisons the list");
+        assertFalse(SpotifyPairing.isValidHost("192.168.1.50,a.local,b.local,c.local,d.local"), "candidate cap");
+    }
+
+    @Test
+    void stateExposesHostCandidatesInOrder() {
+        SpotifyPairing.State state = SpotifyPairing.parse("tok~192.168.1.50,alpha.local~8888");
+
+        assertNotNull(state);
+        assertEquals(java.util.List.of("192.168.1.50", "alpha.local"), state.hosts());
+        assertEquals("192.168.1.50", state.primaryHost());
+        assertEquals("http://192.168.1.50:8888/callback", state.callbackUrl());
+    }
+
+    @Test
     void resolveHostAlwaysAnswersSomething() {
         String host = SpotifyPairing.resolveHost();
         assertNotNull(host);
         assertFalse(host.isBlank());
-        assertTrue(SpotifyPairing.isValidHost(host));
+        assertTrue(SpotifyPairing.isValidSingleHost(host));
+    }
+
+    @Test
+    void resolveHostsKeepsMdnsAsFallbackBehindTheLanAddress() {
+        String hosts = SpotifyPairing.resolveHosts();
+        java.util.List<String> candidates = SpotifyPairing.hostsOf(hosts);
+
+        assertTrue(SpotifyPairing.isValidHost(hosts));
+        assertTrue(candidates.contains(SpotifyPairing.MDNS_FALLBACK_HOST),
+                "a changed DHCP lease must still be recoverable through the mDNS name");
     }
 }

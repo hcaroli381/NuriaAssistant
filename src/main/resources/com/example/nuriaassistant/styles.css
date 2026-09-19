@@ -561,6 +561,13 @@
     -fx-font-weight: 600;
 }
 
+/* LAN endpoint line: a muted diagnostic, not a headline */
+.spotify-auth-endpoint {
+    -fx-text-fill: #5f7591;
+    -fx-font-size: 12px;
+    -fx-line-spacing: 2px;
+}
+
 /* --------------------------------------------------------------------------
    Calendar Screen (Full-screen agenda)
    -------------------------------------------------------------------------- */

@@ -126,19 +126,32 @@ phone ── scan QR ──► accounts.spotify.com ──► https://<you>.gith
                                               http://<PI_LAN_IP>:8888/callback
 ```
 
-Nothing is stored server-side: the state carries the Pi's address, and the
-page bounces the phone straight to the Pi over your own Wi-Fi.
+Nothing is stored server-side: the state carries the Pi's address (plus its
+mDNS name as a fallback, in case its DHCP lease moved), and the page bounces
+the phone straight to the Pi over your own Wi-Fi.
 
 One-time setup:
 
 1. Push this repo and enable **Settings → Pages → Deploy from branch → `main` / `/docs`**.
-2. Add the resulting URL (`https://<you>.github.io/NuriaAssistant/spotify-callback.html`)
+   The site root (`https://<you>.github.io/NuriaAssistant/`) renders a short
+   landing page restating these steps.
+2. Add the resulting callback URL
+   (`https://<you>.github.io/NuriaAssistant/spotify-callback.html`)
    to **Redirect URIs** in the Spotify Developer Dashboard.
 3. Put the same URL in `SPOTIFY_RELAY_URL`.
 
 After that, `Vincular Spotify` shows a QR: she scans it, logs in, and the
 screen connects itself. Tokens persist at `~/.alpha/spotify-tokens.json` and
 are refreshed silently on boot.
+
+If the phone never comes back with the confirmation, isolate the hop:
+
+- `http://<PI_LAN_IP>:8888/ping` from the same phone → if it answers, the Wi-Fi
+  is fine and the redirect URI in the Dashboard is the problem (Spotify then
+  shows `INVALID_CLIENT: Invalid redirect URI` on its own page); if it times
+  out, the phone is on a different network.
+- The app console logs every incoming callback (`OAuth callback from …`), so an
+  empty log means Spotify never redirected the phone.
 
 ## Remote messaging
 

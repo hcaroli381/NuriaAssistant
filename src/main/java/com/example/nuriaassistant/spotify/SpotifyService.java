@@ -147,10 +147,20 @@ public class SpotifyService {
         }
         try {
             authCallbackServer = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
+            authCallbackServer.createContext(SpotifyPairing.PING_PATH, exchange -> {
+                Log.info("Spotify", "OAuth ping from " + exchange.getRemoteAddress() + " — the phone can reach this Pi.");
+                respond(exchange, 200, callbackPage("Alpha te oye",
+                        "Tu m\u00f3vil y Alpha se ven en la red local. Ya puedes volver a escanear el QR de la pantalla."));
+            });
             authCallbackServer.createContext(SpotifyPairing.CALLBACK_PATH, exchange -> {
                 Map<String, String> params = parseQuery(exchange.getRequestURI().getQuery());
                 AuthCallback callback = new AuthCallback(
                         params.get("code"), params.get("state"), params.get("error"));
+
+                Log.info("Spotify", "OAuth callback from " + exchange.getRemoteAddress()
+                        + " (code=" + (callback.hasCode() ? "yes" : "no")
+                        + ", state=" + (callback.state() != null ? "yes" : "no")
+                        + ", error=" + (callback.error() != null ? callback.error() : "none") + ")");
 
                 boolean accepted = false;
                 if (callback.hasCode() && onCodeReceived != null) {
@@ -165,18 +175,25 @@ public class SpotifyService {
                                         : "No lleg\u00f3 ning\u00fan c\u00f3digo. ")
                                         + "Vuelve a escanear el QR de la pantalla.");
 
-                byte[] body = response.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-                exchange.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
-                exchange.sendResponseHeaders(accepted ? 200 : 400, body.length);
-                try (OutputStream os = exchange.getResponseBody()) {
-                    os.write(body);
-                }
+                Log.info("Spotify", "OAuth callback " + (accepted ? "accepted" : "rejected") + ".");
+                respond(exchange, accepted ? 200 : 400, response);
             });
             authCallbackServer.setExecutor(null);
             authCallbackServer.start();
             Log.info("Spotify", "Spotify OAuth callback server started on port " + port);
         } catch (IOException e) {
             Log.error("Spotify", "Failed to start Spotify OAuth callback server on port " + port + ": " + e.getMessage());
+        }
+    }
+
+    /** Writes a small UTF-8 HTML response back to the phone. */
+    private static void respond(com.sun.net.httpserver.HttpExchange exchange, int status, String html)
+            throws IOException {
+        byte[] body = html.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
+        exchange.sendResponseHeaders(status, body.length);
+        try (OutputStream os = exchange.getResponseBody()) {
+            os.write(body);
         }
     }
 
