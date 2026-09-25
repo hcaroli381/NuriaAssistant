@@ -48,7 +48,17 @@ The system operates as an "always-on" smart assistant (similar to an Echo Show) 
     - **Full-screen calendar screen** (calendar icon button next to the alarm/Spotify buttons in the top-right row): Monday-first month grid with event dots (sky = all-day, violet = timed), today outlined, tap a day → its agenda card list on the right; big ‹ › month navigation; auto-closes instantly if music starts or an alarm rings.
     - The calendar icon carries a violet count badge: events starting within the next 7 days (refreshed once per minute and on every feed refresh).
     - Subtle next-event hint under the weather row ("Cita · Hoy 18:00", "Mañana 10:00") refreshed once per minute.
+    - **Configured from Telegram, not on screen:** the share link is long and hostile to a touch keyboard, so she sends `/calendario <enlace>` to the bot. The link is validated synchronously (fetched, must answer `BEGIN:VCALENDAR`) and answered with a real count (*N eventos en el próximo año*); `fetchNow()` also caches the payload so the reboot render is instant. The handler runs on the Telegram polling thread and only the scene-graph install is handed to `Platform.runLater`.
+    - The link is stored in `~/.alpha/settings.json` (`CALENDAR_ICS_URL`) and takes priority over `config.properties`, so it can be changed without rebuilding or redeploying the jar. `installCalendarFeed()` is the single entry point for both boot-time and runtime configuration; the 15-minute refresh ticker is scheduled unconditionally and no-ops while no feed is configured.
     - Privacy: anyone holding the share link can read the calendar — she should share a dedicated calendar, never her main one.
+11. **Network Settings (`WifiService` + touch keyboard):**
+    - The kiosk boots directly into the UI with no keyboard and no terminal, so a new WiFi has to be chosen on the touchscreen. Green signal icon in the top-right row (next to calendar/alarms) opens a full-screen *Conexión* sheet.
+    - **The MAC address is the headline**, not a footnote: routers that only hand an address to whitelisted devices need it before anything else works. It is read from `NetworkInterface` (wireless NIC first, `wl*`, then any other non-loopback) and shown in large type above a plain-language hint.
+    - Scan / link / password typing all go through `nmcli` with **argument lists, never a shell**, so SSIDs and passwords with spaces, quotes or `$` are safe. `nmcli -t` escapes literal colons as `\:` — `WifiService.splitTerse` honours that (`Casa:Wifi` is a real SSID, not a parsing bug).
+    - Networks are deduplicated by SSID (same network seen on several access points keeps the strongest signal), the active one is pinned first, and hidden ones are skipped.
+    - Password entry uses Alpha's own on-screen keyboard (`ui/TouchKeyboard`, letters + shift + `?123` symbols, 46px touch targets). The secret is echoed as dots; an open network skips the keyboard entirely.
+    - Scans and connections block for seconds, so they run on the dedicated `wifiExecutor` (never the FX thread) and report through the sheet instead of throwing. On a dev machine without NetworkManager everything degrades to "NetworkManager no está disponible".
+    - `nmcli` needs NetworkManager permission: keep the kiosk user in the `netdev` group (`install.sh` warns when it is missing).
 ## Remote Messaging System (Telegram & HTTP API)
 
 ### 1. Sending messages via Telegram (From anywhere in the world)
@@ -71,6 +81,23 @@ curl -X POST http://<IP_OF_RASPBERRY_PI>:8080/notify \
      -H "X-API-KEY: nuria-assistant-secret-key" \
      -d "Hola! No te olvides de comprar pan 🥖"
 ```
+
+### 3. Configuring the Apple calendar from Telegram
+
+The `.ics` share link is far too long to type on a touchscreen, so it is sent
+to the bot instead:
+
+1. On the iPhone: **Calendario → toca el calendario → Compartir calendario →
+   activa "Calendario público" → Copiar enlace** (it starts with `webcal://`;
+   `CalendarService` normalizes it to `https://` automatically).
+2. In Telegram, send `/calendario webcal://...`
+3. Alpha fetches and validates the link before storing it, then answers either
+   *"✅ Calendario conectado (N eventos en el próximo año). Ya aparece en la
+   pantalla."* or the concrete reason it was rejected.
+
+The link is persisted in `~/.alpha/settings.json` and overrides
+`CALENDAR_ICS_URL` from `config.properties`, so no rebuild or redeploy is
+needed. `/help` (or `/ayuda`) lists the available commands.
 
 ### Example: Send a message via Python
 ```python
@@ -169,6 +196,7 @@ candidate as an "Intentar por alpha.local" link.
 - **Background — "Aurora Dusk":** Deep navy radial gradient (`#142a49` -> `#08152a` -> `#040b16`) plus Alpha's sky — a hand-placed constellation (`.star*`), a dusk vignette (`.home-vignette`) and her signature mark bottom-left (`.alpha-mark-*`, `.alpha-wordmark`). All of it is static shapes: no animation, rasterised once.
 - **Palette (hand-mixed, do NOT go back to framework defaults):** ink `#040b16` / `#08152a` / `#0d1f3a` / `#142a49`, aurora `#6fc7ef` (dim `#a9dff6`), iris `#a98bf5` (deep `#7c5cf0`), mint `#63d6a4`, ember `#f0b25e`, rose `#f87a7a`, text `#ffffff` / `#dbe6f5` / `#93a8c4` / `#6b7f9c`. The previous values were Tailwind's slate/sky/violet set verbatim, which is exactly what made the UI read as machine-generated — keep new work inside this palette.
 - **Type:** one bundled family, **Space Grotesk** (SIL OFL, `resources/.../fonts/`, loaded by `ui/Fonts.java` before the scene is built, referenced as `-fx-font-family: "Space Grotesk"`). Never rely on system font stacks again.
+- **Touch reach:** every interactive control is at least ~44px and the setup flows assume a finger, not a cursor — the on-screen keyboard (`ui/TouchKeyboard`, 46px keys) is the reference.
 - **Icons:** Alpha has one hand. Every glyph is assembled from plain shapes (`Circle`/`Line`/`Rectangle`, optionally a stroke-only `SVGPath`) and styled through `.icon-line` / `.icon-glyph` / `.mic-glyph` — one 1.7px weight on a 24px grid. No Material/Zxing/emoji glyphs in the chrome, and **no `-fx-letter-spacing`** (JavaFX has no such property; tracked-out labels are written spaced by hand, e.g. `A L P H A`).
 - **Notification Banner:** Alpha's speech bubble — glassmorphic navy card with iris border, her hand-drawn face (`.alpha-face*`), pulsing aura, speech tail, spaced `A L P H A` author tag (`styles.css` `.notification-bubble` family).
 
@@ -186,6 +214,9 @@ candidate as an "Intentar por alpha.local" link.
 - `docs/spotify-callback.html`: static GitHub Pages bounce page — the single whitelisted HTTPS redirect URI; hands the code back to the Pi over the LAN.
 - `src/main/java/com/example/nuriaassistant/ui/Fonts.java` + `src/main/resources/.../fonts/`: Space Grotesk (OFL) faces bundled in the jar.
 - `src/main/java/com/example/nuriaassistant/ui/WeatherUi.java`: condition → shape-built glyph mapping for the home weather row.
+- `src/main/java/com/example/nuriaassistant/ui/TouchKeyboard.java`: on-screen keyboard (letters / shift / `?123` symbols) used by the touch-only setup flows.
+- `src/main/java/com/example/nuriaassistant/services/WifiService.java`: `nmcli`-backed WiFi scan/connect + device MAC address.
+- `src/main/java/com/example/nuriaassistant/services/RuntimeSettings.java`: `~/.alpha/settings.json` overrides for config keys changed at runtime.
 - `src/main/java/com/example/nuriaassistant/services/VoiceBackendLauncher.java`: Spawns the local Python voice backend (uvicorn child process) so the jar is self-contained.
 - `src/main/java/com/example/nuriaassistant/services/WeatherService.java`: OpenWeatherMap client.
 - `src/main/java/com/example/nuriaassistant/services/NotificationServer.java`: HTTP server for remote push notifications.
@@ -247,7 +278,8 @@ candidate as an "Intentar por alpha.local" link.
   - `VOICE_BACKEND_URL`: Base URL of the Python voice backend (default `http://127.0.0.1:8090`).
   - `VOICE_BACKEND_DIR`: (Optional) Path to `voice-backend/` for jar auto-spawn; auto-detected at `./voice-backend`, `~/voice-backend`, `~/.alpha/voice-backend` when unset.
   - `VOICE_PYTHON_BIN`: (Optional) Python interpreter for the spawned backend; defaults to `<dir>/.venv/bin/python` when present, else `python3`.
-  - `CALENDAR_ICS_URL`: Public read-only iCloud calendar `.ics` share link; empty = calendar feature silently off.
+  - `CALENDAR_ICS_URL`: Public read-only iCloud calendar `.ics` share link; empty = calendar feature silently off. Equivalent to sending `/calendario` to the bot — see *Configuring the Apple calendar from Telegram*.
+  - **Runtime overrides:** keys changed from the touchscreen or from Telegram are persisted at `~/.alpha/settings.json` (`RuntimeSettings`, atomic writes) and take priority over `config.properties`. An environment variable still wins over both, so a deployment can always pin a value.
   - `DIM_IDLE_MINUTES` / `DIM_START_HOUR` / `DIM_END_HOUR`: Night dimming screen-saver (dim after N idle minutes between these hours, default 10 / 22 / 8; start > end crosses midnight). Tap anywhere to wake.
 
 ## Voice Assistant Backend (Python on Raspberry Pi)
@@ -330,6 +362,7 @@ One-time provisioning of the box so `java -jar` + Spotify audio + voice all work
 sudo apt update && sudo apt full-upgrade -y
 sudo apt install -y openjdk-21-jre-headless libgtk-3-0 libgl1 mesa-utils \
      fontconfig libasound2 pulseaudio-utils   # JRE + OpenJFX runtime deps
+sudo usermod -aG netdev $USER                # on-screen WiFi sheet -> nmcli (re-login after)
 
 # --- 2. Audio stack (PipeWire; Bookworm default but make sure it runs) ------
 sudo apt install -y pipewire pipewire-audio pipewire-pulse wireplumber
@@ -366,7 +399,17 @@ cd deploy && ./install.sh $USER              # installs nuria-voice + nuria-assi
 # NOTE: with nuria-voice.service enabled, the jar's own auto-spawn stays idle (port busy).
 ```
 
-Checklist after boot: clock renders → scan QR once → "✅ Spotify conectado" → play music from her phone → full-screen player appears.
+Checklist after boot: clock renders → green signal icon shows the MAC and links the WiFi → scan QR once → "✅ Spotify conectado" → play music from her phone → full-screen player appears.
+
+### WiFi setup troubleshooting
+
+- Tap the green signal icon (top-right): it shows the device **MAC** (add it to the router's whitelist if the network filters by MAC) and the current link.
+- *"NetworkManager no está disponible en este dispositivo"*: `nmcli` is missing (`sudo apt install network-manager`) or not on `PATH`.
+- *Buscar redes* finds nothing: check `nmcli device status` — the wireless interface must not be `unmanaged` (`sudo rfkill unblock wifi`).
+- A connection is refused / asks for authorization: the kiosk user is not in `netdev` (`sudo usermod -aG netdev $USER`, then re-login). The sheet prints nmcli's own message, so the real reason is on screen.
+- The link succeeded but nothing loads: the password may have been mistyped — reopen the sheet and scan again; the secret is echoed as dots only, by design.
+- Inspect what the app ran: the console logs `WifiService: connected to <SSID>` or `WifiService: connection to <SSID> failed: <reason>`.
+- Off the touchscreen, the same actions are `nmcli device wifi list` and `nmcli device wifi connect <SSID> password <pass>`.
 
 ## Performance Notes (Raspberry Pi 3)
 

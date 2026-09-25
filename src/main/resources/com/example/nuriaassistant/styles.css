@@ -67,6 +67,16 @@
     -fx-stroke: #a98bf5;
 }
 
+.icon-line-mint {
+    -fx-stroke: #63d6a4;
+}
+
+/* Solid companion for stroke-drawn glyphs (e.g. the WiFi signal dot) */
+.icon-fill-mint {
+    -fx-fill: #63d6a4;
+    -fx-stroke: transparent;
+}
+
 .icon-glyph {
     -fx-stroke: #c6d4e7;
 }
@@ -951,6 +961,135 @@
 
 .alarm-editor-save:hover {
     -fx-background-color: #8ce4bd;
+}
+
+/* --------------------------------------------------------------------------
+   Network Settings Sheet (MAC address + on-screen WiFi setup)
+   The Pi boots with no keyboard: everything here is touch-only, and the MAC
+   is the headline because a whitelisting router needs it at setup time.
+   -------------------------------------------------------------------------- */
+.network-button {
+    -fx-background-color: rgba(99, 214, 164, 0.14);
+    -fx-border-color: rgba(99, 214, 164, 0.55);
+    -fx-background-radius: 34px;
+    -fx-border-radius: 34px;
+    -fx-border-width: 1.5px;
+    -fx-padding: 18px;
+    -fx-cursor: hand;
+}
+
+.network-button:hover {
+    -fx-background-color: rgba(99, 214, 164, 0.28);
+}
+
+.network-caption {
+    -fx-text-fill: #6b7f9c;
+    -fx-font-size: 13px;
+    -fx-font-weight: 700;
+}
+
+.network-mac {
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 34px;
+    -fx-font-weight: 800;
+}
+
+.network-status {
+    -fx-text-fill: #63d6a4;
+    -fx-font-size: 22px;
+    -fx-font-weight: 700;
+}
+
+.network-hint {
+    -fx-text-fill: #93a8c4;
+    -fx-font-size: 14px;
+    -fx-line-spacing: 2px;
+}
+
+/* Password readout: masked dots, so a shoulder-surfer learns nothing */
+.network-password {
+    -fx-text-fill: #f0b25e;
+    -fx-font-size: 30px;
+    -fx-font-weight: 800;
+    -fx-min-height: 40px;
+}
+
+/* Rows inside the scan list (built in code, same family as the alarm rows) */
+.wifi-row {
+    -fx-background-color: rgba(255, 255, 255, 0.045);
+    -fx-border-color: rgba(147, 168, 196, 0.16);
+    -fx-border-width: 1px;
+    -fx-background-radius: 18px;
+    -fx-border-radius: 18px;
+    -fx-padding: 12px 22px;
+    -fx-cursor: hand;
+}
+
+.wifi-row:hover {
+    -fx-background-color: rgba(99, 214, 164, 0.16);
+}
+
+.wifi-row-active {
+    -fx-border-color: rgba(99, 214, 164, 0.6);
+}
+
+.wifi-row-ssid {
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 21px;
+    -fx-font-weight: 700;
+}
+
+.wifi-row-meta {
+    -fx-text-fill: #93a8c4;
+    -fx-font-size: 15px;
+    -fx-font-weight: 600;
+}
+
+.wifi-signal {
+    -fx-text-fill: #6fc7ef;
+    -fx-font-size: 15px;
+    -fx-font-weight: 800;
+}
+
+/* --------------------------------------------------------------------------
+   On-screen keyboard (touch only: no physical keyboard on the Pi)
+   -------------------------------------------------------------------------- */
+.keyboard-key {
+    -fx-text-fill: #dbe6f5;
+    -fx-font-size: 17px;
+    -fx-font-weight: 700;
+    -fx-background-color: rgba(147, 168, 196, 0.16);
+    -fx-background-radius: 10px;
+    -fx-min-width: 48px;
+    -fx-min-height: 46px;
+    -fx-alignment: center;
+    -fx-cursor: hand;
+}
+
+.keyboard-key:hover {
+    -fx-background-color: rgba(111, 199, 239, 0.32);
+}
+
+/* Overrides layer on top of .keyboard-key (both classes are set in code) */
+.keyboard-key-accent {
+    -fx-text-fill: #a9dff6;
+    -fx-font-size: 16px;
+    -fx-font-weight: 800;
+    -fx-background-color: rgba(111, 199, 239, 0.16);
+    -fx-border-color: rgba(111, 199, 239, 0.35);
+    -fx-border-width: 1px;
+    -fx-border-radius: 10px;
+    -fx-min-width: 62px;
+}
+
+.keyboard-key-accent:hover {
+    -fx-background-color: rgba(111, 199, 239, 0.32);
+}
+
+.keyboard-key-wide {
+    -fx-label-padding: 0 8px;
+    -fx-min-width: 240px;
+    -fx-max-width: 240px;
 }
 
 /* --------------------------------------------------------------------------

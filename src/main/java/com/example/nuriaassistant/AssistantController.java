@@ -8,16 +8,19 @@ import com.example.nuriaassistant.models.VoiceAssistantSnapshot;
 import com.example.nuriaassistant.services.AlarmService;
 import com.example.nuriaassistant.services.CalendarService;
 import com.example.nuriaassistant.services.NotificationServer;
+import com.example.nuriaassistant.services.RuntimeSettings;
 import com.example.nuriaassistant.services.TelegramService;
 import com.example.nuriaassistant.services.ThemeManager;
 import com.example.nuriaassistant.services.VoiceAssistantService;
 import com.example.nuriaassistant.services.VoiceBackendLauncher;
 import com.example.nuriaassistant.services.WeatherService;
+import com.example.nuriaassistant.services.WifiService;
 import com.example.nuriaassistant.spotify.SpotifyPairing;
 import com.example.nuriaassistant.spotify.SpotifyQrGenerator;
 import com.example.nuriaassistant.spotify.SpotifyService;
 import com.example.nuriaassistant.ui.NightDimmingController;
 import com.example.nuriaassistant.ui.NotificationBubbleUi;
+import com.example.nuriaassistant.ui.TouchKeyboard;
 import com.example.nuriaassistant.ui.WeatherUi;
 import com.example.nuriaassistant.util.Log;
 import com.google.zxing.common.BitMatrix;
@@ -46,6 +49,7 @@ import javafx.scene.input.MouseEvent;
 import javafx.geometry.Pos;
 import javafx.scene.layout.AnchorPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Pane;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
@@ -294,6 +298,46 @@ public class AssistantController {
     @FXML
     private Label alarmRingGreetingLabel;
 
+    // Network / WiFi Settings Sheet UI (MAC address + touch-only setup)
+    @FXML
+    private AnchorPane networkLayer;
+
+    @FXML
+    private VBox networkCard;
+
+    @FXML
+    private VBox wifiBrowseSection;
+
+    @FXML
+    private Label networkMacLabel;
+
+    @FXML
+    private Label networkStatusLabel;
+
+    @FXML
+    private Label wifiScanStatusLabel;
+
+    @FXML
+    private ScrollPane wifiListScroll;
+
+    @FXML
+    private VBox wifiListContainer;
+
+    @FXML
+    private VBox wifiPasswordSection;
+
+    @FXML
+    private Label wifiPasswordTitleLabel;
+
+    @FXML
+    private Label wifiPasswordValueLabel;
+
+    @FXML
+    private Pane wifiKeyboardHost;
+
+    @FXML
+    private Label wifiConnectStatusLabel;
+
     // Night Dim Overlay UI (screen-saver dim while idle at night)
     @FXML
     private AnchorPane dimLayer;
@@ -330,7 +374,10 @@ public class AssistantController {
     private VoiceAssistantService voiceService;
     private VoiceBackendLauncher voiceBackendLauncher;
     private AlarmService alarmService;
-    private CalendarService calendarService;
+    private volatile CalendarService calendarService;
+
+    // Config keys changed at runtime (touchscreen / Telegram) rather than at deploy time
+    private RuntimeSettings runtimeSettings;
 
     // UI State
     private String cachedWeatherCondition = null;
@@ -380,6 +427,13 @@ public class AssistantController {
     private final Set<DayOfWeek> editorDays = new LinkedHashSet<>();
     private final List<Label> dayChips = new ArrayList<>();
 
+    // Network Settings State (touch-only WiFi setup)
+    private WifiService wifiService;
+    private TouchKeyboard wifiKeyboard;
+    private final StringBuilder wifiPasswordBuffer = new StringBuilder();
+    private WifiService.WifiNetwork pendingWifiNetwork = null;
+    private volatile boolean wifiBusy = false;
+
     // Calendar Screen State
     private List<CalendarEvent> calendarEvents = List.of();
     private YearMonth displayedMonth = null;
@@ -408,6 +462,14 @@ public class AssistantController {
         return t;
     });
 
+    // WiFi scans and connections shell out to nmcli and can take seconds:
+    // they never run on the FX thread (single worker keeps them serialized).
+    private final ExecutorService wifiExecutor = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "wifi-settings-thread");
+        t.setDaemon(true);
+        return t;
+    });
+
     // Single daemon ticker driving weather/Spotify/voice periodic work off the FX thread
     private final ScheduledExecutorService backgroundTicker = Executors.newScheduledThreadPool(1, r -> {
         Thread t = new Thread(r, "assistant-ticker");
@@ -418,6 +480,8 @@ public class AssistantController {
     @FXML
     public void initialize() {
         ConfigLoader configLoader = new ConfigLoader();
+        // Overrides set on screen / from Telegram win over the deployed config.
+        runtimeSettings = new RuntimeSettings();
 
         // Extracted UI controllers first: updateTime() runs during this same
         // method (clock tick + alarm check), so they must exist before then.
@@ -437,6 +501,7 @@ public class AssistantController {
         enableNodeCache(alarmManagerLayer);
         enableNodeCache(spotifyAuthLayer);
         enableNodeCache(calendarLayer);
+        enableNodeCache(networkLayer);
         enableNodeCache(spotifyFullScreenLayer);
 
         // 1. Initialize Clock and Date updates (1-second tick)
@@ -451,22 +516,13 @@ public class AssistantController {
         refreshNextAlarmHint();
 
         // 1c. Initialize Calendar System (public iCloud .ics share link).
-        //     Cached payload renders instantly; network refresh follows.
-        String icsUrl = configLoader.getProperty("CALENDAR_ICS_URL");
+        //     The link can also arrive at runtime from Telegram (/calendario),
+        //     so a stored override takes priority over config.properties.
+        String icsUrl = RuntimeSettings.pick(
+                runtimeSettings.get("CALENDAR_ICS_URL"),
+                configLoader.getProperty("CALENDAR_ICS_URL"));
         if (icsUrl != null && !icsUrl.isBlank()) {
-            calendarService = new CalendarService(icsUrl);
-            calendarEvents = calendarService.loadCached();
-            refreshCalendarBadge();
-            calendarService.fetchAsync(
-                    events -> Platform.runLater(() -> {
-                        calendarEvents = events;
-                        refreshNextEventHint();
-                        refreshCalendarBadge();
-                        if (calendarLayer != null && calendarLayer.isVisible()) {
-                            rebuildCalendarGrid();
-                        }
-                    }),
-                    error -> { /* offline: keep showing cached data */ });
+            installCalendarFeed(icsUrl);
         }
 
         // 2. Initialize Weather Service
@@ -549,8 +605,14 @@ public class AssistantController {
 
         if (telegramToken != null && !telegramToken.isBlank()) {
             telegramService = new TelegramService(telegramToken, telegramChatId, this::displayNotification);
+            // The .ics share link is long and untouchscreen-friendly: it is sent
+            // to the bot instead of typed on the Pi.
+            telegramService.setCalendarUrlHandler(this::handleCalendarUrlCommand);
             telegramService.start();
         }
+
+        // 6b. Initialize the WiFi settings sheet (MAC address + on-screen keyboard).
+        initNetworkSettings();
 
         // 6. Initialize Voice Assistant Front-End (polls Python backend on port 8090).
         //    When the backend is not reachable and lives next to the app, it is
@@ -569,20 +631,89 @@ public class AssistantController {
         if (weatherConfigured) {
             backgroundTicker.scheduleWithFixedDelay(this::fetchWeather, 30, 30, TimeUnit.MINUTES);
         }
-        if (calendarService != null) {
-            backgroundTicker.scheduleWithFixedDelay(
-                    () -> calendarService.fetchAsync(
-                            events -> Platform.runLater(() -> {
-                                calendarEvents = events;
-                                refreshNextEventHint();
-                                refreshCalendarBadge();
-                                if (calendarLayer != null && calendarLayer.isVisible()) {
-                                    rebuildCalendarGrid();
-                                }
-                            }),
-                            error -> { /* offline: keep cached data */ }),
-                    15, 15, TimeUnit.MINUTES);
+        // Scheduled unconditionally: the feed can also be configured later, at
+        // runtime, and the tick is a no-op while none is configured.
+        backgroundTicker.scheduleWithFixedDelay(this::refreshCalendarFeed, 15, 15, TimeUnit.MINUTES);
+    }
+
+    // =========================================================================
+    // CALENDAR FEED INSTALLATION (boot-time config and runtime /calendario)
+    // =========================================================================
+
+    /**
+     * Points the calendar stack at a feed: renders the cached copy instantly,
+     * then refreshes from the network. Must run on the FX thread.
+     */
+    private void installCalendarFeed(String icsUrl) {
+        CalendarService service = new CalendarService(icsUrl);
+        calendarService = service;
+        calendarEvents = service.loadCached();
+        refreshNextEventHint();
+        refreshCalendarBadge();
+        if (calendarLayer != null && calendarLayer.isVisible()) {
+            rebuildCalendarGrid();
         }
+        service.fetchAsync(this::applyCalendarEvents, error -> { /* keep cached data */ });
+    }
+
+    /** Periodic refresh; quietly does nothing while no feed is configured. */
+    private void refreshCalendarFeed() {
+        CalendarService service = calendarService;
+        if (service != null) {
+            service.fetchAsync(this::applyCalendarEvents, error -> { /* keep cached data */ });
+        }
+    }
+
+    private void applyCalendarEvents(List<CalendarEvent> events) {
+        Platform.runLater(() -> {
+            calendarEvents = events;
+            refreshNextEventHint();
+            refreshCalendarBadge();
+            if (calendarLayer != null && calendarLayer.isVisible()) {
+                rebuildCalendarGrid();
+            }
+        });
+    }
+
+    /**
+     * Handles {@code /calendario <enlace>} from Telegram. Runs on the polling
+     * thread: the feed is fetched and validated synchronously so the chat gets a
+     * real answer, and only the scene-graph update is handed to the FX thread.
+     *
+     * @return the Spanish reply to send back to the chat.
+     */
+    private String handleCalendarUrlCommand(String urlArgument) {
+        if (urlArgument == null || urlArgument.isBlank()) {
+            return "Pásame el enlace público del calendario as\u00ed:\n"
+                    + "/calendario webcal://...\n\n"
+                    + "En el iPhone: Calendario \u2192 toca el calendario \u2192 Compartir calendario "
+                    + "\u2192 activa \u201cCalendario p\u00fablico\u201d \u2192 Copiar enlace.";
+        }
+        if (!CalendarService.isPlausibleShareLink(urlArgument)) {
+            return "Ese enlace no parece un calendario. Debe empezar por webcal:// o https://";
+        }
+
+        try {
+            List<CalendarEvent> events = new CalendarService(urlArgument).fetchNow();
+            runtimeSettings.set("CALENDAR_ICS_URL", urlArgument);
+            Platform.runLater(() -> installCalendarFeed(urlArgument));
+            Log.info("Controller", "Calendar feed configured from Telegram: "
+                    + events.size() + " events in the visible window.");
+            return "\u2705 Calendario conectado (" + events.size()
+                    + " eventos en el pr\u00f3ximo a\u00f1o). Ya aparece en la pantalla.";
+        } catch (Exception e) {
+            Log.error("Controller", "Calendar feed rejected: " + e.getMessage());
+            return "\u274c No pude leer ese calendario: " + shortError(e)
+                    + "\nComprueba que el enlace es el p\u00fablico (Calendario p\u00fablico) y vuelve a enviarlo.";
+        }
+    }
+
+    private static String shortError(Exception e) {
+        String message = e.getMessage();
+        if (message == null || message.isBlank()) {
+            return "error de conexi\u00f3n";
+        }
+        return message.length() > 90 ? message.substring(0, 90) + "\u2026" : message;
     }
 
     /**
@@ -710,6 +841,7 @@ public class AssistantController {
         stopOrbBreathing();
         voiceOverlayLayer.setVisible(false);
         closeCalendarScreen(true);
+        closeNetworkScreen(true);
 
         if (activeTransition != null) {
             activeTransition.stop();
@@ -1096,6 +1228,9 @@ public class AssistantController {
         if (calendarLayer == null || calendarLayer.isVisible()) {
             return;
         }
+        // One full-screen sheet at a time.
+        closeNetworkScreen(true);
+        closeAlarmManager();
         LocalDate today = LocalDate.now();
         displayedMonth = YearMonth.from(today);
         selectCalendarDate(today);
@@ -1365,6 +1500,263 @@ public class AssistantController {
             nextEventRow.setVisible(summary != null);
             nextEventLabel.setText(summary != null ? summary : "");
         }
+    }
+
+    // =========================================================================
+    // NETWORK SETTINGS (MAC address + touch-only WiFi setup)
+    //
+    // The kiosk boots with no keyboard and no terminal, so a network change has
+    // to be made on the touchscreen: pick a network from the nmcli scan, type
+    // the password on Alpha's own keyboard. The MAC address is the headline
+    // because a router that only admits whitelisted devices needs it first.
+    // =========================================================================
+
+    /** Builds the on-screen keyboard once; the sheet reuses it on every open. */
+    private void initNetworkSettings() {
+        wifiService = new WifiService();
+        wifiKeyboard = new TouchKeyboard(new TouchKeyboard.KeyHandler() {
+            @Override
+            public void onCharacter(char c) {
+                // WPA passphrases top out at 63 characters.
+                if (wifiPasswordBuffer.length() < 63) {
+                    wifiPasswordBuffer.append(c);
+                    refreshWifiPasswordLabel();
+                }
+            }
+
+            @Override
+            public void onBackspace() {
+                if (!wifiPasswordBuffer.isEmpty()) {
+                    wifiPasswordBuffer.deleteCharAt(wifiPasswordBuffer.length() - 1);
+                    refreshWifiPasswordLabel();
+                }
+            }
+        });
+        wifiKeyboardHost.getChildren().setAll(wifiKeyboard);
+        refreshNetworkInfo();
+    }
+
+    /** MAC address and current link, resolved off the FX thread (both use nmcli). */
+    private void refreshNetworkInfo() {
+        if (networkMacLabel == null) {
+            return;
+        }
+        networkStatusLabel.setText("Comprobando...");
+        wifiExecutor.submit(() -> {
+            String mac = wifiService.macAddress();
+            String ssid = wifiService.activeSsid();
+            Platform.runLater(() -> {
+                networkMacLabel.setText(mac != null ? mac : "No disponible");
+                networkStatusLabel.setText(ssid != null ? ssid : "Sin conexi\u00f3n WiFi");
+            });
+        });
+    }
+
+    /** Wifi icon button in the top-right row. */
+    @FXML
+    public void openNetworkScreen() {
+        if (networkLayer == null || networkLayer.isVisible()) {
+            return;
+        }
+        // One full-screen sheet at a time: close the agenda / alarms underneath.
+        closeCalendarScreen(true);
+        closeAlarmManager();
+        exitWifiPasswordMode();
+        refreshNetworkInfo();
+        if (wifiListContainer.getChildren().isEmpty()) {
+            wifiScanStatusLabel.setText("Toca \u00abBuscar redes\u00bb para ver las redes cercanas.");
+        }
+
+        networkLayer.setOpacity(0.0);
+        networkLayer.setVisible(true);
+        FadeTransition fadeIn = new FadeTransition(Duration.millis(200), networkLayer);
+        fadeIn.setFromValue(0.0);
+        fadeIn.setToValue(1.0);
+        fadeIn.play();
+    }
+
+    @FXML
+    public void closeNetworkScreen() {
+        closeNetworkScreen(false);
+    }
+
+    private void closeNetworkScreen(boolean instant) {
+        if (networkLayer == null || !networkLayer.isVisible()) {
+            return;
+        }
+        if (instant) {
+            networkLayer.setVisible(false);
+            networkLayer.setOpacity(0.0);
+            return;
+        }
+        FadeTransition fadeOut = new FadeTransition(Duration.millis(180), networkLayer);
+        fadeOut.setToValue(0.0);
+        fadeOut.setOnFinished(e -> networkLayer.setVisible(false));
+        fadeOut.play();
+    }
+
+    /** Closes the sheet only when the backdrop itself is clicked, not its children. */
+    @FXML
+    public void closeNetworkScreenOnOutsideClick(MouseEvent event) {
+        if (event.getTarget() == networkLayer) {
+            closeNetworkScreen();
+        }
+    }
+
+    /** Keeps clicks inside the card from bubbling to the backdrop handler. */
+    @FXML
+    public void swallowNetworkClick(MouseEvent event) {
+        event.consume();
+    }
+
+    /** Full scan of the networks in range (nmcli blocks: off the FX thread). */
+    @FXML
+    public void scanWifiNetworks() {
+        if (wifiBusy || wifiKeyboard == null) {
+            return;
+        }
+        wifiBusy = true;
+        wifiScanStatusLabel.setText("Buscando redes...");
+        wifiListContainer.getChildren().clear();
+        wifiExecutor.submit(() -> {
+            List<WifiService.WifiNetwork> networks = wifiService.scanNetworks();
+            Platform.runLater(() -> {
+                wifiBusy = false;
+                rebuildWifiList(networks);
+            });
+        });
+    }
+
+    private void rebuildWifiList(List<WifiService.WifiNetwork> networks) {
+        wifiListContainer.getChildren().clear();
+        if (!wifiService.available()) {
+            wifiScanStatusLabel.setText("NetworkManager no est\u00e1 disponible en este dispositivo.");
+            return;
+        }
+        if (networks.isEmpty()) {
+            wifiScanStatusLabel.setText("No se ha encontrado ninguna red. Vuelve a intentarlo.");
+            return;
+        }
+        wifiScanStatusLabel.setText(networks.size() + " redes encontradas");
+        for (WifiService.WifiNetwork network : networks) {
+            wifiListContainer.getChildren().add(buildWifiRow(network));
+        }
+    }
+
+    private HBox buildWifiRow(WifiService.WifiNetwork network) {
+        HBox row = new HBox(14);
+        row.setAlignment(Pos.CENTER_LEFT);
+        row.getStyleClass().add("wifi-row");
+        if (network.active()) {
+            row.getStyleClass().add("wifi-row-active");
+        }
+
+        Label ssid = new Label(network.ssid());
+        ssid.getStyleClass().add("wifi-row-ssid");
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        Label security = new Label(network.isOpen() ? "abierta" : network.security());
+        security.getStyleClass().add("wifi-row-meta");
+
+        Label signal = new Label(network.signal() + "%");
+        signal.getStyleClass().add("wifi-signal");
+
+        row.getChildren().addAll(ssid, spacer, security, signal);
+        row.setOnMouseClicked(e -> onWifiNetworkSelected(network));
+        return row;
+    }
+
+    private void onWifiNetworkSelected(WifiService.WifiNetwork network) {
+        if (wifiBusy) {
+            return;
+        }
+        if (network.active()) {
+            displayNotification("Ya est\u00e1s conectada a " + network.ssid());
+            return;
+        }
+        pendingWifiNetwork = network;
+        wifiPasswordBuffer.setLength(0);
+        enterWifiPasswordMode(network);
+    }
+
+    private void enterWifiPasswordMode(WifiService.WifiNetwork network) {
+        boolean open = network.isOpen();
+        wifiPasswordTitleLabel.setText(open
+                ? "Red abierta \u00b7 " + network.ssid()
+                : "Contrase\u00f1a de " + network.ssid());
+        wifiConnectStatusLabel.setText(open ? "Esta red no necesita contrase\u00f1a." : "");
+        // An open network has nothing to type: keep the keyboard out of the way.
+        wifiKeyboardHost.setVisible(!open);
+        wifiKeyboardHost.setManaged(!open);
+        refreshWifiPasswordLabel();
+
+        wifiBrowseSection.setVisible(false);
+        wifiBrowseSection.setManaged(false);
+        wifiPasswordSection.setVisible(true);
+        wifiPasswordSection.setManaged(true);
+    }
+
+    private void exitWifiPasswordMode() {
+        pendingWifiNetwork = null;
+        wifiPasswordBuffer.setLength(0);
+        if (wifiPasswordSection == null) {
+            return;
+        }
+        wifiPasswordSection.setVisible(false);
+        wifiPasswordSection.setManaged(false);
+        wifiBrowseSection.setVisible(true);
+        wifiBrowseSection.setManaged(true);
+    }
+
+    /** The secret is echoed as dots: the screen lives in a shared room. */
+    private void refreshWifiPasswordLabel() {
+        if (wifiPasswordValueLabel != null) {
+            wifiPasswordValueLabel.setText("\u2022".repeat(wifiPasswordBuffer.length()));
+        }
+    }
+
+    @FXML
+    public void cancelWifiConnect() {
+        exitWifiPasswordMode();
+    }
+
+    @FXML
+    public void confirmWifiConnect() {
+        WifiService.WifiNetwork network = pendingWifiNetwork;
+        if (network == null) {
+            return;
+        }
+        if (!network.isOpen() && wifiPasswordBuffer.isEmpty()) {
+            wifiConnectStatusLabel.setText("Escribe la contrase\u00f1a de la red.");
+            return;
+        }
+        connectToPendingNetwork();
+    }
+
+    private void connectToPendingNetwork() {
+        WifiService.WifiNetwork network = pendingWifiNetwork;
+        if (network == null || wifiBusy) {
+            return;
+        }
+        String password = wifiPasswordBuffer.toString();
+        wifiBusy = true;
+        wifiConnectStatusLabel.setText("Conectando a " + network.ssid() + "...");
+        wifiExecutor.submit(() -> {
+            WifiService.ConnectResult result = wifiService.connect(network.ssid(), password);
+            Platform.runLater(() -> {
+                wifiBusy = false;
+                if (result.success()) {
+                    exitWifiPasswordMode();
+                    wifiConnectStatusLabel.setText("");
+                    displayNotification("\u2705 " + result.message());
+                    refreshNetworkInfo();
+                } else {
+                    wifiConnectStatusLabel.setText("\u26a0 " + result.message());
+                }
+            });
+        });
     }
 
     // =========================================================================
@@ -1830,6 +2222,7 @@ public class AssistantController {
             closeAlarmManager();
         }
         closeCalendarScreen(true);
+        closeNetworkScreen(true);
 
         ensureAlarmSound();
         if (alarmPlayer != null) {
@@ -1960,6 +2353,8 @@ public class AssistantController {
 
     @FXML
     public void openAlarmManager() {
+        closeNetworkScreen(true);
+        closeCalendarScreen(true);
         exitAlarmEditor();
         rebuildAlarmList();
         alarmManagerLayer.setOpacity(0.0);
@@ -2273,6 +2668,7 @@ public class AssistantController {
         backgroundTicker.shutdownNow();
         spotifyExecutor.shutdownNow();
         voiceExecutor.shutdownNow();
+        wifiExecutor.shutdownNow();
         stopOrbBreathing();
         stopThinkingDots();
         cancelReplyLinger();

@@ -115,6 +115,51 @@ public class TelegramServiceTest {
     }
 
     @Test
+    void testParseCommandSplitsNameAndArgument() {
+        TelegramService.Command command = TelegramService.parseCommand(
+                "/calendario webcal://p01.icloud.com/published/2/abc");
+
+        assertNotNull(command);
+        assertEquals("/calendario", command.name());
+        assertEquals("webcal://p01.icloud.com/published/2/abc", command.argument());
+    }
+
+    @Test
+    void testParseCommandIsCaseInsensitiveAndToleratesExtraSpaces() {
+        TelegramService.Command command = TelegramService.parseCommand("/CALENDARIO   https://x.y/z.ics  ");
+
+        assertNotNull(command);
+        assertEquals("/calendario", command.name());
+        assertEquals("https://x.y/z.ics", command.argument());
+    }
+
+    @Test
+    void testParseCommandStripsBotUsernameSuffix() {
+        TelegramService.Command command = TelegramService.parseCommand("/cal@AlphaBot webcal://x.y/z");
+
+        assertNotNull(command);
+        assertEquals("/cal", command.name());
+        assertEquals("webcal://x.y/z", command.argument());
+    }
+
+    @Test
+    void testParseCommandReturnsNullForPlainText() {
+        assertNull(TelegramService.parseCommand(null));
+        assertNull(TelegramService.parseCommand("Hola Alpha"));
+        assertNull(TelegramService.parseCommand("/"));
+        assertNull(TelegramService.parseCommand("   "));
+    }
+
+    @Test
+    void testParseCommandWithoutArgument() {
+        TelegramService.Command command = TelegramService.parseCommand("/clear");
+
+        assertNotNull(command);
+        assertEquals("/clear", command.name());
+        assertEquals("", command.argument());
+    }
+
+    @Test
     void testParseEmptyOrInvalidUpdates() {
         assertTrue(TelegramService.parseUpdates(null).isEmpty());
         assertTrue(TelegramService.parseUpdates("").isEmpty());

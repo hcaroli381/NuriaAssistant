@@ -106,6 +106,13 @@ fi
 if [ "$MODE" = "source" ] && ! command -v mvn >/dev/null 2>&1; then
     echo "WARNING: Maven not found; ./mvnw needs a JDK (openjdk-21-jre-headless is enough for the jar)."
 fi
+# The kiosk's WiFi sheet drives NetworkManager through nmcli; without this
+# group polkit denies the change and the sheet can only report the error.
+if ! id -nG "$SERVICE_USER" 2>/dev/null | tr ' ' '\n' | grep -qx netdev; then
+    echo "WARNING: '$SERVICE_USER' is not in the 'netdev' group, so the on-screen"
+    echo "         WiFi setup (Conexión sheet) cannot change networks."
+    echo "         Fix with: sudo usermod -aG netdev $SERVICE_USER   (then re-login)"
+fi
 
 # --- Render and install the units -------------------------------------------
 render() {

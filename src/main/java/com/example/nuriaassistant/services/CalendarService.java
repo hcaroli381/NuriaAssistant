@@ -69,6 +69,60 @@ public class CalendarService {
     }
 
     /**
+     * Cheap sanity check for a link typed/sent in by hand (Telegram
+     * {@code /calendario}): a share URL needs a scheme and a host. It cannot
+     * prove the feed is readable — {@link #fetchNow()} does that — but it keeps
+     * a pasted note or a phone's shared text from being stored as a URL.
+     */
+    public static boolean isPlausibleShareLink(String url) {
+        if (url == null) {
+            return false;
+        }
+        String trimmed = url.trim();
+        if (trimmed.length() < 12 || trimmed.contains(" ")) {
+            return false;
+        }
+        String lower = trimmed.toLowerCase(java.util.Locale.ROOT);
+        if (!lower.startsWith("webcal://") && !lower.startsWith("https://") && !lower.startsWith("http://")) {
+            return false;
+        }
+        try {
+            URI uri = URI.create(normalizeScheme(trimmed));
+            String host = uri.getHost();
+            return host != null && host.contains(".");
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Synchronous fetch used when a link is configured at runtime (Telegram):
+     * the sender gets a real answer — how many events were read — instead of a
+     * silent "saved". Persists the payload so the reboot render is instant.
+     *
+     * @throws IllegalStateException when the URL does not answer with a calendar.
+     */
+    public List<CalendarEvent> fetchNow() throws IOException, InterruptedException {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(icsUrl))
+                .timeout(Duration.ofSeconds(REQUEST_TIMEOUT_S))
+                .header("Accept", "text/calendar")
+                .GET()
+                .build();
+
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() != 200) {
+            throw new IllegalStateException("respuesta HTTP " + response.statusCode());
+        }
+        String body = response.body();
+        if (body == null || !body.contains("BEGIN:VCALENDAR")) {
+            throw new IllegalStateException("el enlace no devuelve un calendario");
+        }
+        persist(body);
+        return parseWindow(body);
+    }
+
+    /**
      * Parses the cached payload from disk (boot-time instant render).
      *
      * @return Events when a cache exists, otherwise an empty list.

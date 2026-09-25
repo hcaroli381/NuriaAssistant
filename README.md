@@ -23,7 +23,14 @@ startup.
 - **Alarms** — tactile full-screen alarm with snooze/dismiss, repeat days and
   one-shot modes; JSON persistence at `~/.alpha/alarms.json`.
 - **iCloud calendar** — read-only public `.ics` feed with a full-screen agenda,
-  recurring events and a next-event hint (no Apple credentials on the Pi).
+  recurring events and a next-event hint (no Apple credentials on the Pi). The
+  share link is sent to the Telegram bot (`/calendario …`), which is much
+  easier than typing it on a touchscreen; it is validated, cached and stored so
+  it survives reboots.
+- **WiFi setup on the touchscreen** — no keyboard on the Pi: a *Conexión* sheet
+  shows the device **MAC address** (for routers that whitelist devices), scans
+  the networks in range and lets you type the password on Alpha's own
+  on-screen keyboard.
 - **Voice assistant** — continuous wake word, offline Spanish STT (Vosk),
   LLM-backed replies (Groq), and neural TTS (Piper), all driven from the
   Python backend in `voice-backend/`.
@@ -58,9 +65,9 @@ nothing on the Pi.
 | Path | Contents |
 | --- | --- |
 | `src/main/java/.../AssistantController.java` | Main JavaFX controller (composition root) |
-| `src/main/java/.../services/` | Backend services (HTTP clients, servers, persistence) |
+| `src/main/java/.../services/` | Backend services (HTTP clients, servers, persistence, `WifiService` for `nmcli`, `RuntimeSettings` for runtime overrides) |
 | `src/main/java/.../spotify/` | Spotify OAuth2, token store, QR generation |
-| `src/main/java/.../ui/` | Extracted UI controllers (night dimming, speech bubble, weather mapping) + Alpha's bundled typeface |
+| `src/main/java/.../ui/` | Extracted UI controllers (night dimming, speech bubble, weather mapping), the on-screen keyboard + Alpha's bundled typeface |
 | `src/main/resources/` | FXML layout, stylesheet, fonts, sounds, config templates |
 | `docs/` | Static GitHub Pages file used as the Spotify HTTPS redirect (`spotify-callback.html`) |
 | `voice-backend/` | Python voice assistant (FastAPI + wake word/STT/LLM/TTS) |
@@ -104,7 +111,7 @@ take priority):
 | `SPOTIFY_REDIRECT_URI` | Loopback fallback for desktop development (default `http://127.0.0.1:8888/callback`) |
 | `OWNER_NAME` | Name Alpha greets on the alarm screen (`Buenos días, Nuria`) |
 | `TELEGRAM_BOT_TOKEN` / `TELEGRAM_ALLOWED_CHAT_ID` | Remote messaging; optional chat-ID allowlist |
-| `CALENDAR_ICS_URL` | Public read-only iCloud `.ics` share link (empty = feature off) |
+| `CALENDAR_ICS_URL` | Public read-only iCloud `.ics` share link (empty = feature off; can also be set at runtime with `/calendario` on Telegram) |
 | `DIM_IDLE_MINUTES` / `DIM_START_HOUR` / `DIM_END_HOUR` | Night-dimming screen saver (default 10 / 22 / 8) |
 | `VOICE_BACKEND_URL` / `VOICE_BACKEND_DIR` / `VOICE_PYTHON_BIN` | Voice backend discovery / spawning |
 
@@ -112,6 +119,32 @@ Voice-backend keys live in `voice-backend/.env` (see `.env.example`): audio
 thresholds, `GROQ_API_KEY` + model, Piper TTS paths (relative paths are
 anchored to `voice-backend/`), tool-action commands and the notification API
 key.
+
+### Connecting the calendar (from your phone)
+
+1. On the iPhone: **Calendario → el calendario → Compartir calendario →
+   activa "Calendario público" → Copiar enlace**.
+2. Send it to Alpha's Telegram bot: `/calendario webcal://…`
+3. She validates it, stores it (so it survives reboots) and answers with how
+   many events she read. `/help` lists the commands.
+
+The link can also be put in `CALENDAR_ICS_URL` before deployment; a value sent
+to the bot takes priority over the one in the config file.
+
+> Share a dedicated calendar, never your main one: anyone holding the link can
+> read it.
+
+### Changing the WiFi network
+
+Alpha boots with no keyboard, so the network is set on screen: tap the green
+signal icon in the top-right row. The sheet shows the device **MAC address**
+(add it to your router's whitelist if it filters by MAC) and the current
+connection; *Buscar redes* lists the networks in range and the password is
+typed on Alpha's own on-screen keyboard.
+
+The kiosk user must be in the `netdev` group so NetworkManager lets the app
+change connections (`sudo usermod -aG netdev $USER`, then log out and back in —
+`deploy/install.sh` warns when it is missing).
 
 ## Spotify phone pairing
 

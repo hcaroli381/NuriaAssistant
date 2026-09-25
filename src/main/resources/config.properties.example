@@ -16,6 +16,11 @@ OWNER_NAME=Nuria
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_ALLOWED_CHAT_ID=
 
+# Public read-only iCloud calendar (.ics) share link. Empty = calendar off.
+# It can also be set at runtime by sending /calendario <enlace> to the bot;
+# that value is stored in ~/.alpha/settings.json and wins over this file.
+CALENDAR_ICS_URL=
+
 # Night dimming (screen saver): dim after N idle minutes between these hours
 DIM_IDLE_MINUTES=10
 DIM_START_HOUR=22

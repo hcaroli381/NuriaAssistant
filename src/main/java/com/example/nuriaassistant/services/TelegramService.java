@@ -10,8 +10,10 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -22,6 +24,15 @@ import java.util.regex.Pattern;
 public class TelegramService {
 
     public record TelegramMessage(long updateId, long chatId, String senderName, String text) {}
+
+    /** A bot command split into its lower-cased name and its raw argument. */
+    public record Command(String name, String argument) {}
+
+    private static final String HELP_TEXT = """
+            🫧 Aquí tienes lo que puedo hacer:
+            • Escríbeme cualquier mensaje y aparecerá en la pantalla de Alpha.
+            • /clear — retira el mensaje de la pantalla.
+            • /calendario <enlace> — conecta tu calendario de Apple a partir de su enlace público.""";
 
     // Precompiled patterns: the poll loop parses every getUpdates response, so
     // compiling these once (instead of per chunk / per request) avoids
@@ -39,6 +50,13 @@ public class TelegramService {
     private Thread pollingThread;
     private long lastUpdateId = 0;
 
+    /**
+     * Applies a runtime configuration command (currently the calendar share
+     * link) and returns the reply to send back to the chat. Runs on the
+     * polling thread, so the handler must not touch the scene graph directly.
+     */
+    private volatile Function<String, String> calendarUrlHandler;
+
     public TelegramService(String botToken, String allowedChatId, Consumer<String> onMessageReceived) {
         this.botToken = botToken != null ? botToken.trim() : null;
         this.allowedChatId = allowedChatId != null && !allowedChatId.isBlank() ? allowedChatId.trim() : null;
@@ -46,6 +64,39 @@ public class TelegramService {
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
+    }
+
+    /**
+     * Wires the {@code /calendario} command: the handler receives the argument
+     * text and returns the Spanish reply shown in the chat. The big share link
+     * is far easier to paste on a phone than to type on a touchscreen, which is
+     * why the calendar is configured from Telegram instead of on screen.
+     */
+    public void setCalendarUrlHandler(Function<String, String> handler) {
+        this.calendarUrlHandler = handler;
+    }
+
+    /**
+     * Splits a message into a command and its argument ({@code /cal enlace} →
+     * {@code (/cal, "enlace")}), returning null for plain text. The optional
+     * {@code @BotName} suffix group chats append is stripped.
+     */
+    public static Command parseCommand(String text) {
+        if (text == null) {
+            return null;
+        }
+        String trimmed = text.trim();
+        if (!trimmed.startsWith("/") || trimmed.length() < 2) {
+            return null;
+        }
+        int space = trimmed.indexOf(' ');
+        String name = space < 0 ? trimmed : trimmed.substring(0, space);
+        String argument = space < 0 ? "" : trimmed.substring(space + 1).trim();
+        int at = name.indexOf('@');
+        if (at > 0) {
+            name = name.substring(0, at);
+        }
+        return new Command(name.toLowerCase(Locale.ROOT), argument);
     }
 
     /**
@@ -131,7 +182,7 @@ public class TelegramService {
         }
 
         if (text.equalsIgnoreCase("/start")) {
-            sendReply(msg.chatId(), "👋 ¡Hola " + msg.senderName() + "! Escríbeme cualquier mensaje y se quedará en la pantalla hasta que lo cierren o mandes /clear para borrarlo.");
+            sendReply(msg.chatId(), "👋 ¡Hola " + msg.senderName() + "! Escríbeme cualquier mensaje y se quedará en la pantalla hasta que lo cierren o mandes /clear para borrarlo.\n\n" + HELP_TEXT);
             return;
         }
 
@@ -144,6 +195,24 @@ public class TelegramService {
             return;
         }
 
+        Command command = parseCommand(text);
+        if (command != null) {
+            switch (command.name()) {
+                case "/calendario", "/calendar", "/cal" -> {
+                    handleCalendarCommand(msg, command);
+                    return;
+                }
+                case "/ayuda", "/help" -> {
+                    sendReply(msg.chatId(), HELP_TEXT);
+                    return;
+                }
+                default -> {
+                    // Unknown command: fall through and show it on screen, so a
+                    // mistyped command is still visible on the display.
+                }
+            }
+        }
+
         // Alpha presents every remote message as her own speech on screen
         String formattedDisplay = text;
 
@@ -153,6 +222,25 @@ public class TelegramService {
 
         // Reply confirmation back to Telegram
         sendReply(msg.chatId(), "✅ Mensaje mostrado en la pantalla");
+    }
+
+    /**
+     * Runs the calendar-setup command and replies with the handler's verdict.
+     */
+    private void handleCalendarCommand(TelegramMessage msg, Command command) {
+        Function<String, String> handler = calendarUrlHandler;
+        if (handler == null) {
+            sendReply(msg.chatId(), "El calendario no está disponible en esta pantalla.");
+            return;
+        }
+        String reply;
+        try {
+            reply = handler.apply(command.argument());
+        } catch (Exception e) {
+            Log.error("Telegram", "TelegramService: calendar command failed: " + e.getMessage());
+            reply = "❌ No pude leer ese calendario.";
+        }
+        sendReply(msg.chatId(), reply != null && !reply.isBlank() ? reply : "✅ Hecho");
     }
 
     /**
