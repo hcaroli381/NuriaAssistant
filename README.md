@@ -175,9 +175,61 @@ ssh pi@<PI_IP> 'JDK_JAVA_OPTIONS="-Xms64m -Xmx384m -XX:+UseSerialGC -XX:TieredSt
 ```
 
 The recommended Pi 3 JVM flags (capped heap, serial GC, C1-only JIT) are also
-wired into `deploy/nuria-assistant.service` via `JDK_JAVA_OPTIONS`. For
-boot-on-power, run `cd deploy && ./install.sh $USER` to install the systemd
-units (see `deploy/` and the setup checklist in `CLAUDE.md`).
+wired into `deploy/nuria-assistant.service` via `JDK_JAVA_OPTIONS`.
+
+### Boot-on-power (the Pi *is* the assistant)
+
+The goal: give the Pi power and it is already the assistant — never launch it
+by hand again. `nuria-voice.service` starts the Python backend and
+`nuria-assistant.service` launches the kiosk on the desktop session's `:0`,
+both on every boot.
+
+**Do this once, after any change you want the Pi to pick up at boot:**
+
+- [ ] **1. Build the ARM jar on your PC** (never `-Ppi` for local runs):
+  ```bash
+  ./mvnw clean package -Ppi -Djavafx.platform=linux-aarch64 -DskipTests
+  ```
+- [ ] **2. Copy it to the Pi, inside the project** (the installer looks in
+      `target/`, next to the project and in `~`):
+  ```bash
+  scp target/NuriaAssistant-1.0-SNAPSHOT-all.jar pi@<PI_IP>:~/NuriaAssistant/target/
+  ```
+- [ ] **3. Install the units on the Pi** — and let the installer turn on
+      desktop autologin, because the UI cannot appear without a logged-in
+      desktop session on `:0`:
+  ```bash
+  ssh pi@<PI_IP> 'cd ~/NuriaAssistant/deploy && ./install.sh $USER --autologin'
+  ```
+  Read its output: it warns if the jar is missing, if
+  `voice-backend/.venv/bin/python` does not exist, or if autologin is still off.
+- [ ] **4. Reboot and walk away.**
+  ```bash
+  ssh pi@<PI_IP> 'sudo reboot'
+  ```
+  No login, no terminal, no command: the clock should appear on its own. If it
+  does not, the display wait has not seen `:0` yet — the unit keeps retrying
+  every 10s, and `journalctl -u nuria-assistant -f` says why.
+
+**Check / configure it later (over SSH, from outside):**
+
+```bash
+systemctl --no-pager status nuria-voice nuria-assistant   # are they up?
+journalctl -u nuria-voice -u nuria-assistant -f           # live logs
+
+# Stop autostart to edit config, then launch by hand:
+sudo systemctl stop nuria-assistant nuria-voice
+sudo systemctl disable nuria-assistant nuria-voice
+DISPLAY=:0 JDK_JAVA_OPTIONS='-Xms64m -Xmx384m -XX:+UseSerialGC -XX:TieredStopAtLevel=1' \
+  java -jar ~/NuriaAssistant/target/NuriaAssistant-1.0-SNAPSHOT-all.jar
+
+# Undo the whole thing (stop + disable + delete both units):
+cd ~/NuriaAssistant/deploy && ./install.sh --uninstall
+# ...and put it back at any time: ./install.sh $USER --autologin
+```
+
+> Running the jar by hand also spawns the voice backend itself, so leave
+> `nuria-voice` stopped or the two will fight over port 8090.
 
 > Never use `-Ppi` for local dev — it bundles ARM natives that won't load on
 > x86.

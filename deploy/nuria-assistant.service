@@ -1,8 +1,10 @@
 [Unit]
 Description=Nuria Assistant JavaFX Kiosk UI (1024x600)
-Requires=nuria-voice.service
-After=graphical.target nuria-voice.service network-online.target
-Wants=network-online.target
+# Wants (not Requires): a broken voice backend must never keep the clock,
+# weather, calendar and alarms off the screen - the UI just shows a grey orb
+# if the backend is unreachable.
+Wants=nuria-voice.service network-online.target
+After=graphical.target display-manager.service network-online.target
 StartLimitIntervalSec=0
 
 [Service]
@@ -10,17 +12,24 @@ Type=simple
 User=__USER__
 WorkingDirectory=__PROJECT_DIR__
 
-# Wait for the desktop session (XWayland on Raspberry Pi OS Bookworm)
+# Wait for the desktop session's X display (XWayland on Raspberry Pi OS
+# Bookworm). The UI only renders once someone is logged in on :0, so desktop
+# autologin must be enabled - install.sh checks for it and can turn it on.
 ExecStartPre=/bin/bash -c 'for i in $(seq 1 60); do [ -e /tmp/.X11-unix/X0 ] && exit 0; sleep 2; done; echo "No X display :0 found"; exit 1'
 
 Environment=DISPLAY=:0
+Environment=XAUTHORITY=__HOME__/.Xauthority
+# Alarms and TTS play through the logged-in user's PipeWire/Pulse session, so
+# the service needs that session's runtime dir and D-Bus socket.
+Environment=XDG_RUNTIME_DIR=/run/user/__UID__
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/__UID__/bus
 
 # Pi 3 tuned JVM: capped heap (1 GB RAM box), single-threaded serial GC
 # (lowest CPU/thread overhead at small heaps) and C1-only JIT (far less
 # compilation work on the slow ARM cores; plenty for an event-driven UI).
 Environment=JDK_JAVA_OPTIONS='-Xms64m -Xmx384m -XX:+UseSerialGC -XX:TieredStopAtLevel=1'
 
-ExecStart=/bin/bash -lc 'cd __PROJECT_DIR__ && ./mvnw javafx:run'
+ExecStart=__EXEC_START__
 Restart=always
 RestartSec=10
 

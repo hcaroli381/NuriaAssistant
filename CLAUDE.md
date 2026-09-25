@@ -299,10 +299,15 @@ The backend can emit/execute structured actions:
 
 ```bash
 cd deploy && ./install.sh $USER          # renders placeholders and installs both systemd units
+cd deploy && ./install.sh --uninstall    # stop, disable and delete them again
 ```
 
 - `nuria-voice.service`: backend at boot, `Restart=always` (5s backoff), bound to `0.0.0.0:8090`.
-- `nuria-assistant.service`: waits for X display `:0` (XWayland on Pi OS Bookworm), then runs `./mvnw javafx:run`; requires the voice service.
+- `nuria-assistant.service`: waits for X display `:0` (XWayland on Pi OS Bookworm), then runs the kiosk; requires the voice service. `StartLimitIntervalSec=0` + `Restart=always` mean a missing display (no autologin yet) only delays it — the UI appears by itself as soon as a desktop session logs in, so nothing has to be launched by hand.
+- `install.sh` picks the command the kiosk unit runs: the prebuilt fat jar whenever one exists in `target/` (or next to the project), else `./mvnw javafx:run`. The jar path is the intended one — a Maven build at every boot costs minutes on a Pi 3 and needs the local repo. Force either with `--jar` / `--source`.
+- The kiosk unit gets the logged-in session's environment: `XAUTHORITY`, `XDG_RUNTIME_DIR=/run/user/<uid>` and `DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/<uid>/bus`. Without those, alarms and TTS are silent because the service cannot reach the user's PipeWire/Pulse server.
+- **Desktop autologin is mandatory** and `install.sh` never assumes it: it detects `autologin-user=` in `/etc/lightdm/` and otherwise prints the fix. Apply it with `--autologin` (runs `raspi-config nonint do_boot_behaviour B4`).
+- `install.sh` also warns when `voice-backend/.venv/bin/python` or a jar is missing, and never blocks on the display wait (`systemctl start --no-block`), so running it over SSH returns immediately.
 - The JavaFX app auto-starts the runtime loop once the backend answers `/assistant/state`, so no manual step is needed after power-on.
 
 ### Voice troubleshooting
@@ -357,6 +362,7 @@ DISPLAY=:0 java -Dprism.forceSw=true -jar NuriaAssistant-1.0-SNAPSHOT-all.jar
 
 # --- 6. Boot-on-power (alternative to manual run) ---------------------------
 cd deploy && ./install.sh $USER              # installs nuria-voice + nuria-assistant units
+# add --autologin if the desktop does not log in by itself (the UI needs :0)
 # NOTE: with nuria-voice.service enabled, the jar's own auto-spawn stays idle (port busy).
 ```
 
