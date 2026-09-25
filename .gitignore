@@ -35,6 +35,9 @@ build/
 ### VS Code ###
 .vscode/
 
+### Local AI tooling config ###
+.claude/
+
 ### Mac OS ###
 .DS_Store
 
