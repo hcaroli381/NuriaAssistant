@@ -1,5 +1,7 @@
 package com.example.nuriaassistant;
 
+import javafx.fxml.FXMLLoader;
+import javafx.scene.shape.SVGPath;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.w3c.dom.Document;
@@ -9,6 +11,7 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
 import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -74,6 +77,25 @@ public class FxmlContractTest {
         NodeList children = node.getChildNodes();
         for (int i = 0; i < children.getLength(); i++) {
             walk(children.item(i), visitor);
+        }
+    }
+
+    @Test
+    void svgIconsAreAcceptedByTheRealFxmlLoader() throws Exception {
+        java.util.List<String> paths = new java.util.ArrayList<>();
+        walk(view, element -> {
+            if ("SVGPath".equals(element.getTagName())) {
+                paths.add(element.getAttribute("content"));
+            }
+        });
+
+        assertFalse(paths.isEmpty(), "Expected SVG path icons in the FXML");
+        for (String pathData : paths) {
+            String fragment = "<?import javafx.scene.shape.SVGPath?>"
+                    + "<SVGPath xmlns:fx=\"http://javafx.com/fxml\" content=\"" + pathData + "\"/>";
+            SVGPath path = new FXMLLoader().load(new ByteArrayInputStream(
+                    fragment.getBytes(StandardCharsets.UTF_8)));
+            assertFalse(path.getLayoutBounds().isEmpty(), "SVG icon must have drawable geometry: " + pathData);
         }
     }
 

@@ -47,6 +47,11 @@
    or a stroke-only SVGPath, so one weight — 1.7px on a 24px grid — runs through
    the chips, the sheets and her face. Recoloring is a stroke change, never a
    new asset.
+   Geometry follows SF Symbols (iOS/macOS): round caps and joins everywhere, true
+   circular arcs for the WiFi fan, tangent bells on the alarm case, ring posts
+   piercing the calendar's top edge. Top-right toolbar marks are WHITE on their
+   own tinted disc, the way iOS draws a toolbar item: the accent lives in the
+   disc, never in the mark, so all four entries read as one family.
    -------------------------------------------------------------------------- */
 .icon-line,
 .icon-glyph,
@@ -63,6 +68,10 @@
     -fx-stroke: #f0b25e;
 }
 
+.icon-line-aurora {
+    -fx-stroke: #6fc7ef;
+}
+
 .icon-line-iris {
     -fx-stroke: #a98bf5;
 }
@@ -71,9 +80,31 @@
     -fx-stroke: #63d6a4;
 }
 
+/* Chrome glyphs: the top-right row buttons. White on their own tinted disc,
+   the way iOS draws a toolbar item — the accent lives in the disc, never in
+   the mark, so all four entries read as one family. */
+.icon-line-white {
+    -fx-stroke: #ffffff;
+}
+
 /* Solid companion for stroke-drawn glyphs (e.g. the WiFi signal dot) */
 .icon-fill-mint {
     -fx-fill: #63d6a4;
+    -fx-stroke: transparent;
+}
+
+.icon-fill-ember {
+    -fx-fill: #f0b25e;
+    -fx-stroke: transparent;
+}
+
+.icon-fill-iris {
+    -fx-fill: #a98bf5;
+    -fx-stroke: transparent;
+}
+
+.icon-fill-white {
+    -fx-fill: #ffffff;
     -fx-stroke: transparent;
 }
 
@@ -81,7 +112,9 @@
     -fx-stroke: #c6d4e7;
 }
 
-/* The mic is recolored per state from AssistantController.setVoiceTheme */
+/* The mic is recolored per state from AssistantController.setVoiceTheme — it is
+   a status light, not chrome, so it keeps the LED ring semantics instead of the
+   white toolbar treatment. */
 .mic-glyph {
     -fx-stroke: #6fc7ef;
 }
@@ -514,8 +547,10 @@
     -fx-cursor: hand;
 }
 
+/* The glyph is already white, so hover lifts the disc instead of the stroke */
 .alarm-clock-button:hover {
-    -fx-background-color: rgba(111, 199, 239, 0.26);
+    -fx-background-color: rgba(111, 199, 239, 0.28);
+    -fx-border-color: rgba(169, 223, 246, 0.95);
 }
 
 .spotify-link-button {
@@ -592,7 +627,8 @@
 }
 
 .calendar-button:hover {
-    -fx-background-color: rgba(169, 139, 245, 0.28);
+    -fx-background-color: rgba(169, 139, 245, 0.30);
+    -fx-border-color: rgba(196, 174, 251, 0.95);
 }
 
 .calendar-badge {
@@ -979,7 +1015,8 @@
 }
 
 .network-button:hover {
-    -fx-background-color: rgba(99, 214, 164, 0.28);
+    -fx-background-color: rgba(99, 214, 164, 0.30);
+    -fx-border-color: rgba(140, 228, 189, 0.95);
 }
 
 .network-caption {
