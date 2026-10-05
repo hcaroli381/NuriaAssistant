@@ -433,3 +433,21 @@ Rules to keep the UI smooth at 1024x600 on the Pi — do not regress these:
 ## Planned Features (TODO)
 
 - ~~iCloud Calendar widget~~ **Done** — see component list item 10 (`CalendarService`, full-screen agenda screen).
+- **Voice actions & endpoints (Vosk + Groq LLM actions)**:
+  - **Alarm management by voice & Telegram**:
+    - Add `POST /alarm` endpoint to `NotificationServer` (`hour`, `minute`, `label`, `repeatDays`, `once`).
+    - Backend action `set_alarm`: LLM extracts time from natural language (*"pon una alarma a las 7:30"*, *"despiértame a las ocho"*) and posts to `NotificationServer`.
+    - Telegram command `/alarma HH:mm [etiqueta]`.
+  - **Calendar queries by voice**:
+    - Endpoint `GET /calendar/events` or `GET /calendar/summary` on `NotificationServer`.
+    - Backend action `get_calendar`: allows Alpha to speak agenda occurrences for today/tomorrow (*"¿qué tengo hoy en el calendario?"*).
+  - **Enhanced Spotify voice controls**:
+    - Extend current play/pause actions with playback navigation (`spotify_next`, `spotify_previous`).
+    - Optional track/artist search via Spotify Web API or Raspotify/playerctl.
+- **Architecture & Controller Modularization**:
+  - Decompose `AssistantController.java` (~2700 lines) into dedicated view controllers/delegates (`CalendarViewController`, `AlarmViewController`, `WifiViewController`, `SpotifyViewController`) to maintain clean separation while preserving the central orchestrator.
+- **Service Robustness & Caching**:
+  - `WeatherService`: validate HTTP status code before parsing, and make JSON extraction resilient to API errors.
+  - Spotify cover art disk cache: simple local cache (`~/.alpha/cache/covers/`) to avoid re-fetching identical covers over Wi-Fi.
+- **System & SD Card Health (Raspberry Pi 24/7)**:
+  - Add `journald` limits (`Storage=volatile` or `SystemMaxUse=30M`) in `deploy/install.sh` to protect the MicroSD card from wear during continuous operation.
