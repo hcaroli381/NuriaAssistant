@@ -185,14 +185,30 @@
               AnchorPane.topAnchor="85.0" AnchorPane.bottomAnchor="35.0"
               AnchorPane.leftAnchor="45.0" AnchorPane.rightAnchor="45.0">
 
-            <!-- Album Cover Container -->
+            <!-- Album Cover Container: a fixed 320x320 square that hugs the (square)
+                 cover art. The min/max pair matters — an HBox stretches its children
+                 to the full row height, and without a maxHeight the card grew to
+                 ~480px while the 320px cover stayed square, framing it with two navy
+                 letterbox bars. -->
             <StackPane prefWidth="320.0" prefHeight="320.0"
+                       minWidth="320.0" minHeight="320.0"
+                       maxWidth="320.0" maxHeight="320.0"
                        styleClass="spotify-art-card">
-                <Label text="🎵" styleClass="spotify-art-placeholder"/>
-                <ImageView fx:id="spotifyCoverArtView"
-                           fitWidth="320.0" fitHeight="320.0"
-                           preserveRatio="true"
-                           smooth="true"/>
+                <!-- The cover is square-cornered and the card is not: this inner
+                     wrapper is clipped to the card's 24px radius so the photo cannot
+                     paint over the rounded border. The clip stays off the card itself
+                     so the card's drop shadow is not cut off with it. -->
+                <StackPane maxWidth="320.0" maxHeight="320.0">
+                    <clip>
+                        <Rectangle width="320.0" height="320.0"
+                                   arcWidth="48.0" arcHeight="48.0"/>
+                    </clip>
+                    <Label text="🎵" styleClass="spotify-art-placeholder"/>
+                    <ImageView fx:id="spotifyCoverArtView"
+                               fitWidth="320.0" fitHeight="320.0"
+                               preserveRatio="true"
+                               smooth="true"/>
+                </StackPane>
             </StackPane>
 
             <!-- Song, Artist, Album Info -->

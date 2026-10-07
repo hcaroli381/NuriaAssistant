@@ -148,6 +148,64 @@ public class FxmlContractTest {
         assertTrue(missing.isEmpty(), "FXML handlers with no controller method: " + missing);
     }
 
+    private static double size(Element element, String attribute) {
+        String value = element.getAttribute(attribute);
+        assertFalse(value.isBlank(),
+                "<" + element.getTagName() + " styleClass=\"" + element.getAttribute("styleClass")
+                        + "\"> must declare " + attribute + ": the enclosing HBox resizes any child "
+                        + "that leaves it open");
+        return Double.parseDouble(value);
+    }
+
+    private static Element byStyleClass(String styleClass) {
+        java.util.List<Element> found = new java.util.ArrayList<>();
+        walk(view, element -> {
+            for (String name : element.getAttribute("styleClass").trim().split("\\s+")) {
+                if (name.equals(styleClass)) {
+                    found.add(element);
+                }
+            }
+        });
+        assertEquals(1, found.size(), "Expected exactly one node styled ." + styleClass);
+        return found.get(0);
+    }
+
+    /**
+     * The album cover is square, so its card must be pinned to that same square:
+     * an HBox stretches children to the full row height, and a card that is only
+     * given prefWidth/prefHeight grows to ~480px and letterboxes the 320px cover
+     * inside two navy bars. The min/max pair (and matching ImageView fit size) is
+     * what keeps the cover flush with its frame.
+     */
+    @Test
+    void spotifyArtCardStaysTheSizeOfItsCover() {
+        Element card = byStyleClass("spotify-art-card");
+        double prefWidth = size(card, "prefWidth");
+        double prefHeight = size(card, "prefHeight");
+
+        assertEquals(prefWidth, size(card, "maxWidth"), 0.0,
+                "Without a maxWidth the HBox stretches the cover card horizontally");
+        assertEquals(prefHeight, size(card, "maxHeight"), 0.0,
+                "Without a maxHeight the HBox stretches the cover card to the row height, "
+                        + "which frames the square cover in two navy bars");
+        assertEquals(prefWidth, size(card, "minWidth"), 0.0,
+                "The cover card must not shrink below the cover either");
+        assertEquals(prefHeight, size(card, "minHeight"), 0.0,
+                "The cover card must not shrink below the cover either");
+
+        java.util.List<Element> covers = new java.util.ArrayList<>();
+        walk(card, element -> {
+            if ("ImageView".equals(element.getTagName())) {
+                covers.add(element);
+            }
+        });
+        assertEquals(1, covers.size(), "Expected one ImageView inside .spotify-art-card");
+        assertEquals(prefWidth, size(covers.get(0), "fitWidth"), 0.0,
+                "The cover must be drawn at the card's full width");
+        assertEquals(prefHeight, size(covers.get(0), "fitHeight"), 0.0,
+                "The cover must be drawn at the card's full height");
+    }
+
     @Test
     void everyFxmlStyleClassIsStyled() {
         Set<String> missing = new LinkedHashSet<>();
