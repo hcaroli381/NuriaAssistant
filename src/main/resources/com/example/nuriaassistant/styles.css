@@ -53,9 +53,22 @@
    own tinted disc, the way iOS draws a toolbar item: the accent lives in the
    disc, never in the mark, so all four entries read as one family.
    -------------------------------------------------------------------------- */
-.icon-line,
-.icon-glyph,
-.mic-glyph,
+.icon-glyph {
+    -fx-fill: transparent;
+    -fx-stroke: #c6d4e7;
+    -fx-stroke-width: 1.7px;
+    -fx-stroke-line-cap: round;
+    -fx-stroke-line-join: round;
+}
+
+.mic-glyph {
+    -fx-fill: transparent;
+    -fx-stroke: #a9dff6;
+    -fx-stroke-width: 1.7px;
+    -fx-stroke-line-cap: round;
+    -fx-stroke-line-join: round;
+}
+
 .alpha-face-mouth {
     -fx-fill: transparent;
     -fx-stroke: #a9dff6;
@@ -64,27 +77,58 @@
     -fx-stroke-line-join: round;
 }
 
-.icon-line-ember {
+/* One class per glyph, carrying the paint itself. JavaFX never resolves a
+   multi-class FXML node against this stylesheet: its style map stays empty, the
+   node is flagged CLEAN and the shape keeps the default BLACK fill — that is what
+   turned the alarm, calendar and WiFi glyphs into black blobs. Never re-merge
+   these into a `selector, selector { }` list and never paint a glyph with an
+   inline style; `.icon-fill-*` are the solid companions (e.g. the WiFi dot). */
+.glyph-ember {
+    -fx-fill: transparent;
     -fx-stroke: #f0b25e;
+    -fx-stroke-width: 1.7px;
+    -fx-stroke-line-cap: round;
+    -fx-stroke-line-join: round;
 }
 
-.icon-line-aurora {
+.glyph-aurora {
+    -fx-fill: transparent;
     -fx-stroke: #6fc7ef;
+    -fx-stroke-width: 1.7px;
+    -fx-stroke-line-cap: round;
+    -fx-stroke-line-join: round;
 }
 
-.icon-line-iris {
+.glyph-iris {
+    -fx-fill: transparent;
     -fx-stroke: #a98bf5;
+    -fx-stroke-width: 1.7px;
+    -fx-stroke-line-cap: round;
+    -fx-stroke-line-join: round;
 }
 
-.icon-line-mint {
+.glyph-mint {
+    -fx-fill: transparent;
     -fx-stroke: #63d6a4;
+    -fx-stroke-width: 1.7px;
+    -fx-stroke-line-cap: round;
+    -fx-stroke-line-join: round;
 }
 
-/* Chrome glyphs: the top-right row buttons. White on their own tinted disc,
-   the way iOS draws a toolbar item — the accent lives in the disc, never in
-   the mark, so all four entries read as one family. */
-.icon-line-white {
+.glyph-white {
+    -fx-fill: transparent;
     -fx-stroke: #ffffff;
+    -fx-stroke-width: 1.7px;
+    -fx-stroke-line-cap: round;
+    -fx-stroke-line-join: round;
+}
+
+.mic-glyph-muted {
+    -fx-fill: transparent;
+    -fx-stroke: #f87a7a;
+    -fx-stroke-width: 1.7px;
+    -fx-stroke-line-cap: round;
+    -fx-stroke-line-join: round;
 }
 
 /* Solid companion for stroke-drawn glyphs (e.g. the WiFi signal dot) */
@@ -106,10 +150,6 @@
 .icon-fill-white {
     -fx-fill: #ffffff;
     -fx-stroke: transparent;
-}
-
-.icon-glyph {
-    -fx-stroke: #c6d4e7;
 }
 
 /* The mic is recolored per state from AssistantController.setVoiceTheme — it is
@@ -201,6 +241,15 @@
 /* Her face inside the speech bubble: white shell, dark features */
 .alpha-face {
     -fx-fill: #ffffff;
+}
+
+/* The antenna stem is the one .alpha-face mark that is a Line: it needs its own
+   stroke, since a fill is all the other rays of the face use. */
+.alpha-face-stem {
+    -fx-fill: transparent;
+    -fx-stroke: #ffffff;
+    -fx-stroke-width: 1.7px;
+    -fx-stroke-line-cap: round;
 }
 
 .alpha-face-eye {

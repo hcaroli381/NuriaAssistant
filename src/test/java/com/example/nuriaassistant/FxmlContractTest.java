@@ -17,6 +17,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -34,8 +35,12 @@ public class FxmlContractTest {
     private static final String FXML = "com/example/nuriaassistant/hello-view.fxml";
     private static final String CSS = "com/example/nuriaassistant/styles.css";
 
+    /** Shape tags whose default paint is a solid black fill. */
+    private static final Set<String> FILLED_SHAPES = Set.of("Circle", "Rectangle", "SVGPath", "Path", "Polygon");
+
     private static Document view;
     private static Set<String> cssClasses;
+    private static Map<String, String> cssRules;
     private static Set<String> fields;
     private static Set<String> methods;
 
@@ -58,6 +63,14 @@ public class FxmlContractTest {
         Matcher selector = Pattern.compile("\\.([A-Za-z][A-Za-z0-9_-]*)").matcher(css);
         while (selector.find()) {
             cssClasses.add(selector.group(1));
+        }
+
+        // class -> the declarations of its simplest rule (the first one whose
+        // whole selector is that single class)
+        cssRules = new java.util.LinkedHashMap<>();
+        Matcher rule = Pattern.compile("(?m)^\\s*\\.([A-Za-z][A-Za-z0-9_-]*)\\s*\\{([^}]*)\\}").matcher(css);
+        while (rule.find()) {
+            cssRules.putIfAbsent(rule.group(1), rule.group(2));
         }
 
         fields = new LinkedHashSet<>();
@@ -146,6 +159,43 @@ public class FxmlContractTest {
             }
         });
         assertTrue(missing.isEmpty(), "FXML handlers with no controller method: " + missing);
+    }
+
+    /**
+     * A shape is painted only by its own rule. A node carrying several glyph
+     * classes never resolves against styles.css: JavaFX keeps its style map empty
+     * and marks the node CLEAN, so the shape silently renders with the default
+     * black fill and no stroke — that is exactly what turned the alarm, calendar
+     * and WiFi glyphs into black blobs. One class per glyph, and that class must
+     * carry the paint: -fx-fill for a filled shape, -fx-stroke for a Line.
+     */
+    @Test
+    void everyShapeIsPaintedByASingleCompleteRule() {
+        Set<String> offenders = new LinkedHashSet<>();
+        walk(view, element -> {
+            String tag = element.getTagName();
+            if (!FILLED_SHAPES.contains(tag) && !"Line".equals(tag)) {
+                return;
+            }
+            String styleClass = element.getAttribute("styleClass").trim();
+            if (styleClass.isBlank()) {
+                return; // clips and other unpainted shapes
+            }
+            Set<String> classes = new LinkedHashSet<>(java.util.Arrays.asList(styleClass.split("\\s+")));
+            if (classes.size() != 1) {
+                offenders.add(tag + " styleClass=\"" + styleClass + "\" carries " + classes.size()
+                        + " classes; a multi-class glyph node never matches styles.css and renders black");
+                return;
+            }
+            String body = cssRules.getOrDefault(classes.iterator().next(), "");
+            if (FILLED_SHAPES.contains(tag) && !body.contains("-fx-fill")) {
+                offenders.add(tag + " ." + classes.iterator().next() + " has no -fx-fill (defaults to black)");
+            }
+            if ("Line".equals(tag) && !body.contains("-fx-stroke")) {
+                offenders.add("Line ." + classes.iterator().next() + " has no -fx-stroke (defaults to black)");
+            }
+        });
+        assertTrue(offenders.isEmpty(), "Shapes that would render unstyled: " + offenders);
     }
 
     private static double size(Element element, String attribute) {
