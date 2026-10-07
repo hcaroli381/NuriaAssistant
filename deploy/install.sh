@@ -97,6 +97,59 @@ else
     echo "Kiosk command: ./mvnw javafx:run  (builds at every boot - slower)"
 fi
 
+# --- Pi 3 JVM profile -------------------------------------------------------
+# Rendered into the kiosk unit (__JVM_OPTIONS__): capped heap, serial GC,
+# C1-only JIT, software rendering (no flaky GL/Mesa probe on the Pi) and a
+# class-data-sharing archive. The archive is created by the first run and
+# reused at every boot after that, which skips class parsing/verification for
+# the whole fat jar - see PIAGENT.md for how to measure it.
+JVM_OPTIONS="-Xms64m -Xmx384m -XX:+UseSerialGC -XX:TieredStopAtLevel=1 -Dprism.order=sw"
+CDS_ARCHIVE="$SERVICE_HOME/.alpha/alpha.jsa"
+JVM_OPTIONS="$JVM_OPTIONS -XX:+AutoCreateSharedArchive -XX:SharedArchiveFile=$CDS_ARCHIVE"
+
+# The archive and the app's runtime settings live here; the JVM only needs it
+# to be writable (it logs a warning and continues if it is not).
+if [ ! -d "$SERVICE_HOME/.alpha" ]; then
+    if mkdir -p "$SERVICE_HOME/.alpha" 2>/dev/null; then
+        echo "Created $SERVICE_HOME/.alpha (CDS archive + runtime settings)."
+    else
+        echo "NOTE: could not create $SERVICE_HOME/.alpha; the JVM will log a CDS warning"
+        echo "      until it exists. Fix with: mkdir -p $SERVICE_HOME/.alpha"
+    fi
+fi
+
+# Keys the kiosk unit loads from outside the jar (see EnvironmentFile= in
+# nuria-assistant.service). Only a commented template: the jar already carries
+# the config.properties it was built with, and this file is how a Pi gets its
+# own values without a rebuild.
+ENV_FILE="$SERVICE_HOME/.alpha/alpha.env"
+if [ ! -f "$ENV_FILE" ] && [ -d "$SERVICE_HOME/.alpha" ]; then
+    if cat > "$ENV_FILE" 2>/dev/null <<'ALPHA_ENV'
+# Alpha per-installation keys, loaded by nuria-assistant.service and
+# nuria-voice.service. Uncomment and fill in only what this Pi needs. Keep the
+# file private (chmod 600) and never commit it: it holds API keys.
+# Anything set here wins over config.properties (inside the jar) and over
+# voice-backend/.env, so a deployment can change keys without a rebuild.
+#GROQ_API_KEY=
+#OPENWEATHER_API_KEY=
+#OPENWEATHER_CITY=Granada,ES
+#SPOTIFY_CLIENT_ID=
+#SPOTIFY_CLIENT_SECRET=
+#SPOTIFY_RELAY_URL=https://<usuario>.github.io/NuriaAssistant/spotify-callback.html
+#TELEGRAM_BOT_TOKEN=
+#TELEGRAM_ALLOWED_CHAT_ID=
+#OWNER_NAME=Nuria
+#CALENDAR_ICS_URL=
+#DIM_IDLE_MINUTES=10
+#DIM_START_HOUR=22
+#DIM_END_HOUR=8
+ALPHA_ENV
+    then
+        chmod 600 "$ENV_FILE" 2>/dev/null || true
+        echo "Wrote $ENV_FILE (commented template)."
+    fi
+fi
+
 # --- Preflight warnings -----------------------------------------------------
 if [ ! -x "$PROJECT_DIR/voice-backend/.venv/bin/python" ]; then
     echo "WARNING: $PROJECT_DIR/voice-backend/.venv/bin/python is missing;"
@@ -121,6 +174,7 @@ render() {
         -e "s|__HOME__|$SERVICE_HOME|g" \
         -e "s|__PROJECT_DIR__|$PROJECT_DIR|g" \
         -e "s|__EXEC_START__|$EXEC_START|g" \
+        -e "s|__JVM_OPTIONS__|$JVM_OPTIONS|g" \
         "$1" | sudo tee "/etc/systemd/system/$(basename "$1")" > /dev/null
 }
 
@@ -165,6 +219,7 @@ fi
 
 echo
 echo "Done. Both services are enabled and will start on every power-on."
+echo "  JVM flags: $JVM_OPTIONS"
 echo "  status:    systemctl --no-pager status nuria-voice nuria-assistant"
 echo "  logs:      journalctl -u nuria-voice -u nuria-assistant -f"
 echo "  disable:   cd $SCRIPT_DIR && ./install.sh --uninstall"

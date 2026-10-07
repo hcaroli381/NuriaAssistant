@@ -18,6 +18,7 @@ import com.example.nuriaassistant.services.WifiService;
 import com.example.nuriaassistant.spotify.SpotifyPairing;
 import com.example.nuriaassistant.spotify.SpotifyQrGenerator;
 import com.example.nuriaassistant.spotify.SpotifyService;
+import com.example.nuriaassistant.ui.Cursors;
 import com.example.nuriaassistant.ui.NightDimmingController;
 import com.example.nuriaassistant.ui.NotificationBubbleUi;
 import com.example.nuriaassistant.ui.TouchKeyboard;
@@ -39,7 +40,6 @@ import javafx.fxml.FXML;
 import javafx.scene.Node;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
-import javafx.scene.Cursor;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.image.PixelFormat;
@@ -2411,7 +2411,7 @@ public class AssistantController {
             if (!alarm.isEnabled()) {
                 row.getStyleClass().add("alarm-row-disabled");
             }
-            row.setCursor(Cursor.HAND);
+            Cursors.setInteractive(row);
             row.setOnMouseClicked(e -> openAlarmEditorFor(alarm));
 
             Label timeLabel = new Label(alarm.displayTime());
@@ -2551,7 +2551,7 @@ public class AssistantController {
             Label chip = new Label(chipLetter(day));
             chip.getStyleClass().add("day-chip");
             chip.setUserData(day);
-            chip.setCursor(Cursor.HAND);
+            Cursors.setInteractive(chip);
             chip.setOnMouseClicked(e -> {
                 if (editorOnce) {
                     return; // day chips are irrelevant in one-shot mode

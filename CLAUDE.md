@@ -234,7 +234,9 @@ candidate as an "Intentar por alpha.local" link.
 - `src/main/java/com/example/nuriaassistant/models/Alarm.java`: Alarm model (time, repeat days, snooze/fire state, due-window logic).
 - `src/main/java/com/example/nuriaassistant/services/AlarmService.java`: Alarm persistence (`~/.alpha/alarms.json`), due-checks and next-alarm summary.
 - `src/main/resources/com/example/nuriaassistant/sounds/alarm.wav`: Looping ring chime.
-- `deploy/`: systemd units (`nuria-voice.service`, `nuria-assistant.service`) + `install.sh` for boot-on-power kiosk deployment.
+- `deploy/`: systemd units (`nuria-voice.service`, `nuria-assistant.service`) + `install.sh` for boot-on-power kiosk deployment + `push-to-pi.sh` (one-command copy of the built jar and voice backend to a Pi, refusing an x86 jar).
+- `PIAGENT.md`: one-pass runbook for bringing a fresh Pi up — build the ARM jar, copy jar + voice backend + models, systemd + autologin, end-to-end checks, and the measured performance levers.
+- `MIGRATIONTUTORIAL.md`: the same migration as a hand-run checklist for the owner (copy-paste from the PC, one verification per step). When the deployment steps change, update it together with `deploy/install.sh` and `PIAGENT.md`.
 
 ## Alarms
 
@@ -285,6 +287,8 @@ candidate as an "Intentar por alpha.local" link.
   - `VOICE_BACKEND_DIR`: (Optional) Path to `voice-backend/` for jar auto-spawn; auto-detected at `./voice-backend`, `~/voice-backend`, `~/.alpha/voice-backend` when unset.
   - `VOICE_PYTHON_BIN`: (Optional) Python interpreter for the spawned backend; defaults to `<dir>/.venv/bin/python` when present, else `python3`.
   - `CALENDAR_ICS_URL`: Public read-only iCloud calendar `.ics` share link; empty = calendar feature silently off. Equivalent to sending `/calendario` to the bot — see *Configuring the Apple calendar from Telegram*.
+  - `KIOSK_MODE`: `true` = undecorated, full-screen, always-on-top window with the mouse pointer hidden (the Pi appliance: no title bar and no minimize button to misuse); `false` (default) keeps `./mvnw javafx:run` a normal window. `deploy/nuria-assistant.service` sets it. Per-node `Cursor.HAND` hints must go through `ui/Cursors` so they cannot bring the pointer back.
+  - `GROQ_API_KEY` belongs to the Python backend, so it normally lives in `voice-backend/.env`; setting it in `~/.alpha/alpha.env` works identically (both units load that file and `python-dotenv` never overrides the process environment). It is the only key that is not baked into the jar.
   - **Runtime overrides:** keys changed from the touchscreen or from Telegram are persisted at `~/.alpha/settings.json` (`RuntimeSettings`, atomic writes) and take priority over `config.properties`. An environment variable still wins over both, so a deployment can always pin a value.
   - `DIM_IDLE_MINUTES` / `DIM_START_HOUR` / `DIM_END_HOUR`: Night dimming screen-saver (dim after N idle minutes between these hours, default 10 / 22 / 8; start > end crosses midnight). Tap anywhere to wake.
 
@@ -343,6 +347,8 @@ cd deploy && ./install.sh --uninstall    # stop, disable and delete them again
 - `nuria-voice.service`: backend at boot, `Restart=always` (5s backoff), bound to `0.0.0.0:8090`.
 - `nuria-assistant.service`: waits for X display `:0` (XWayland on Pi OS Bookworm), then runs the kiosk; requires the voice service. `StartLimitIntervalSec=0` + `Restart=always` mean a missing display (no autologin yet) only delays it — the UI appears by itself as soon as a desktop session logs in, so nothing has to be launched by hand.
 - `install.sh` picks the command the kiosk unit runs: the prebuilt fat jar whenever one exists in `target/` (or next to the project), else `./mvnw javafx:run`. The jar path is the intended one — a Maven build at every boot costs minutes on a Pi 3 and needs the local repo. Force either with `--jar` / `--source`.
+- Both units load `EnvironmentFile=-~/.alpha/alpha.env`, a commented template `install.sh` writes: per-installation keys (OpenWeather / Spotify / Telegram / `OWNER_NAME`, and optionally `GROQ_API_KEY`) without a rebuild. `nuria-assistant.service` additionally sets `KIOSK_MODE=true`. An `Environment=` line of the unit itself still wins over the file.
+- The unit's `JDK_JAVA_OPTIONS` is rendered by `install.sh`: `-Xms64m -Xmx384m -XX:+UseSerialGC -XX:TieredStopAtLevel=1 -Dprism.order=sw` (software pipeline only — no flaky GL probe on a Pi 3) plus `-XX:+AutoCreateSharedArchive -XX:SharedArchiveFile=~/.alpha/alpha.jsa`. The archive is written on the first run and reused afterwards; a stale or corrupt one is ignored, never fatal.
 - The kiosk unit gets the logged-in session's environment: `XAUTHORITY`, `XDG_RUNTIME_DIR=/run/user/<uid>` and `DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/<uid>/bus`. Without those, alarms and TTS are silent because the service cannot reach the user's PipeWire/Pulse server.
 - **Desktop autologin is mandatory** and `install.sh` never assumes it: it detects `autologin-user=` in `/etc/lightdm/` and otherwise prints the fix. Apply it with `--autologin` (runs `raspi-config nonint do_boot_behaviour B4`).
 - `install.sh` also warns when `voice-backend/.venv/bin/python` or a jar is missing, and never blocks on the display wait (`systemctl start --no-block`), so running it over SSH returns immediately.
@@ -421,6 +427,7 @@ Checklist after boot: clock renders → green signal icon shows the MAC and link
 
 Rules to keep the UI smooth at 1024x600 on the Pi — do not regress these:
 
+- **Boot cost is part of the budget.** The kiosk runs a prebuilt fat jar (never Maven at boot), C1-only, and reuses the CDS archive at `~/.alpha/alpha.jsa`: with the deployed flags a 2-CPU + software-rendering dev box reached its first window in 6.6-7.2 s without the archive and 4.3-5.0 s with it. `Alpha UI up in N ms (kiosk=…)` is logged at every startup — that is the number to compare on the Pi, and the remaining levers (pulse rate, GL pipeline, `-Xmx`, zram) are listed in `PIAGENT.md`.
 - **Never repaint identical state.** Spotify polling results are signature-deduplicated (`lastTrackSignature`): text labels and cover art are only touched when track/device/cover actually changed. Voice UI is a change-deduplicated state machine.
 - **Cache animated nodes.** All overlays that animate opacity/scale (`voiceOrb`, `voiceCard`, `notificationBanner`, `alarmGlowPane`, `alarmRingLayer`, `spotify*Layer`...) get `setCache(true)` once in `initialize()` so gradients/effects rasterize once instead of per pulse.
 - **Keep periodic work off the FX animation clock.** Only the 1-second clock tick is an FX `Timeline` (it must be, for label updates + alarm checks). Weather (30 min), Spotify polls (4s) and voice polls (1s) run on the shared daemon `backgroundTicker`.

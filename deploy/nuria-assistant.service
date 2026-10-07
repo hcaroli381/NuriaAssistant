@@ -24,10 +24,27 @@ Environment=XAUTHORITY=__HOME__/.Xauthority
 Environment=XDG_RUNTIME_DIR=/run/user/__UID__
 Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/__UID__/bus
 
-# Pi 3 tuned JVM: capped heap (1 GB RAM box), single-threaded serial GC
-# (lowest CPU/thread overhead at small heaps) and C1-only JIT (far less
-# compilation work on the slow ARM cores; plenty for an event-driven UI).
-Environment=JDK_JAVA_OPTIONS='-Xms64m -Xmx384m -XX:+UseSerialGC -XX:TieredStopAtLevel=1'
+# Kiosk: no title bar, no window buttons, window pinned over the whole screen
+# and above the desktop panel. Also hides the mouse pointer (the Pi is touch
+# only). Set to false on a dev Pi to get a normal window back for debugging.
+Environment=KIOSK_MODE=true
+
+# Per-installation keys that live outside the jar (OpenWeather, Spotify,
+# Telegram, OWNER_NAME, ...). install.sh writes a commented template here; the
+# leading '-' means the unit still starts when the file does not exist.
+EnvironmentFile=-__HOME__/.alpha/alpha.env
+
+# Pi 3 tuned JVM (rendered by install.sh):
+#   -Xms64m -Xmx384m          capped heap on the 1 GB box
+#   -XX:+UseSerialGC          lowest overhead collector at that heap size
+#   -XX:TieredStopAtLevel=1   C1-only JIT: far less compilation on slow ARM
+#   -Dprism.order=sw          software rendering only, no flaky GL/Mesa probe
+#   -XX:+AutoCreateSharedArchive / -XX:SharedArchiveFile
+#                             class-data-sharing archive created on the first
+#                             run and reused afterwards: skips class parsing
+#                             and verification at every boot
+# See PIAGENT.md ("Rendimiento") to measure and to trade any of these off.
+Environment=JDK_JAVA_OPTIONS='__JVM_OPTIONS__'
 
 ExecStart=__EXEC_START__
 Restart=always

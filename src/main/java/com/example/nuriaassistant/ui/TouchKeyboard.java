@@ -1,7 +1,6 @@
 package com.example.nuriaassistant.ui;
 
 import javafx.geometry.Pos;
-import javafx.scene.Cursor;
 import javafx.scene.control.Label;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
@@ -142,7 +141,7 @@ public class TouchKeyboard extends VBox {
     private static Label styledKey(String text, String... styleClasses) {
         Label key = new Label(text);
         key.getStyleClass().addAll(styleClasses);
-        key.setCursor(Cursor.HAND);
+        Cursors.setInteractive(key);
         return key;
     }
 }

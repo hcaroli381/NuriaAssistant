@@ -21,6 +21,11 @@ TELEGRAM_ALLOWED_CHAT_ID=
 # that value is stored in ~/.alpha/settings.json and wins over this file.
 CALENDAR_ICS_URL=
 
+# Kiosk mode: undecorated, full-screen, always-on-top window with the mouse
+# pointer hidden. Enabled by deploy/nuria-assistant.service on the Pi; leave it
+# off (default) so `./mvnw javafx:run` stays a normal, closeable window.
+KIOSK_MODE=false
+
 # Night dimming (screen saver): dim after N idle minutes between these hours
 DIM_IDLE_MINUTES=10
 DIM_START_HOUR=22

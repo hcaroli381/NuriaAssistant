@@ -13,5 +13,11 @@ Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
 
+# Same per-installation key file as the kiosk unit: an env var set here wins
+# over voice-backend/.env (python-dotenv does not override the process
+# environment), so GROQ_API_KEY and the Piper paths can live in one place
+# instead of two. The leading '-' = the file is optional.
+EnvironmentFile=-__HOME__/.alpha/alpha.env
+
 [Install]
 WantedBy=multi-user.target
