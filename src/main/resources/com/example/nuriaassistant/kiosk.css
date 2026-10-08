@@ -1,0 +1,4 @@
+/* Kiosk Mode: completely hide mouse cursor on touchscreen */
+* {
+    -fx-cursor: none !important;
+}

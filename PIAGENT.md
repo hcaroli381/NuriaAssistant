@@ -257,8 +257,8 @@ apartado 1. Si algo no aparece solo, mira el apartado 11 antes de tocar nada.
 |---|---|
 | Se ejecuta el **jar prebuilt**, no Maven | un build en la Pi 3 cuesta minutos y necesita el repo local |
 | `-XX:TieredStopAtLevel=1` | sin JIT C2: menos compilación en los núcleos lentos, arranque más corto |
-| `-XX:+UseSerialGC` | el colector con menos sobrecarga en un heap de 384 MB |
-| `-Xms64m -Xmx384m` | techo de memoria en una caja de 1 GB |
+| `-XX:+UseSerialGC` | el colector con menos sobrecarga en un heap de 200 MB |
+| `-Xms64m -Xmx200m` | techo de memoria óptimo en 1 GB de RAM (evita thrashing de swap en la microSD) |
 | `-Dprism.order=sw` | solo pipeline software: ni sondea GL/Mesa, que en la Pi 3 es frágil |
 | **CDS** (`AutoCreateSharedArchive`) | el primer arranque escribe `~/.alpha/alpha.jsa`; los siguientes cargan las clases del jar ya verificadas, sin parsearlas |
 | Trabajo periódico fuera del hilo de la UI | clima 30 min, Spotify 4 s, voz 1 s en un ticker daemon; solo el reloj usa `Timeline` |
@@ -362,6 +362,9 @@ levanta uvicorn si no lo encuentra corriendo (útil para probar sin systemd).
 | La ventana tiene barra de títulos | `KIOSK_MODE` no llegó: `systemctl show nuria-assistant -p Environment` |
 | El WiFi no cambia desde la pantalla | el usuario no está en `netdev` (re-login) o NetworkManager no está activo |
 | Va lento tras cambiar el jar | el archivo CDS es viejo: `rm ~/.alpha/alpha.jsa` y reinicia |
+| Reloj congelado o lag de 5-10s | CPU/Swap saturados: comprueba que `amixer -c 2 sset 'Auto Gain Control' off`, micro en ganancia 10 (`amixer -c 2 sset Mic 10`), y `VOICE_WAKE_MIN_RMS=220.0`. En Java, verifica que `JDK_JAVA_OPTIONS` use `-Xmx200m` para no usar swap SD. |
+| El puntero del ratón aparece al tocar | Verifica que `kiosk.css` esté en el jar (`* { -fx-cursor: none !important; }`) y que `unclutter-xfixes` esté corriendo (`unclutter --timeout 0 --fork --start-hidden --hide-on-touch` en `~/.config/labwc/autostart`). |
+| Undervoltage / throttling en Pi | Añadir `avoid_warnings=2` en `/boot/firmware/config.txt` bajo `[all]` para evitar caídas de frecuencia de la CPU. |
 
 ## 12. Reglas del repositorio (por si hay que tocar código en el PC)
 

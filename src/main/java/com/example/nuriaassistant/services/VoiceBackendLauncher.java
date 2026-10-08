@@ -120,6 +120,12 @@ public class VoiceBackendLauncher {
         spawnAttempted = false;
     }
     private Path resolveBackendDir() {
+        if (backendDirOverride != null && !backendDirOverride.isBlank()) {
+            String trimmed = backendDirOverride.trim();
+            if ("none".equalsIgnoreCase(trimmed) || "disabled".equalsIgnoreCase(trimmed) || "false".equalsIgnoreCase(trimmed)) {
+                return null;
+            }
+        }
         List<Path> candidates = new ArrayList<>();
         String home = System.getProperty("user.home");
         if (backendDirOverride != null && !backendDirOverride.isBlank()) {

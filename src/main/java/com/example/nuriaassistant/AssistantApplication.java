@@ -70,6 +70,15 @@ public class AssistantApplication extends Application {
             scene.getStylesheets().add(stylesheet);
         }
 
+        if (kiosk) {
+            // Touch-only device: the arrow is noise. Enforce cursor: none across all elements
+            scene.setCursor(Cursor.NONE);
+            var kioskSheet = AssistantApplication.class.getResource("kiosk.css");
+            if (kioskSheet != null) {
+                scene.getStylesheets().add(kioskSheet.toExternalForm());
+            }
+        }
+
         controller = fxmlLoader.getController();
 
         stage.setTitle("Alpha Assistant");

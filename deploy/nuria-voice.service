@@ -12,6 +12,8 @@ ExecStart=__PROJECT_DIR__/voice-backend/.venv/bin/python -m uvicorn main:app --h
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
+Environment=XDG_RUNTIME_DIR=/run/user/__UID__
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/__UID__/bus
 
 # Same per-installation key file as the kiosk unit: an env var set here wins
 # over voice-backend/.env (python-dotenv does not override the process

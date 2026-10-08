@@ -36,6 +36,15 @@ public class VoiceBackendLauncherTest {
     }
 
     @Test
+    void disabledBackendDirNeverSpawns() {
+        VoiceBackendLauncher launcher = new VoiceBackendLauncher(
+                "http://127.0.0.1:8090", "none", null);
+
+        assertFalse(launcher.ensureRunning(), "none override must disable launcher");
+        assertFalse(launcher.isAlive());
+    }
+
+    @Test
     void blankUrlTreatsBackendAsLocal() throws IOException {
         Path dir = Files.createTempDirectory("voice-backend");
         Files.writeString(dir.resolve("main.py"), "# backend");

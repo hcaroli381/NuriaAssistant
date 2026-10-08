@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import json
+import math
 import os
+import queue
 import shlex
 import shutil
 import subprocess
 import tempfile
 import threading
 import time
+import wave
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from enum import Enum
@@ -51,8 +54,11 @@ class Settings:
     sample_rate: int = _env_int("VOICE_SAMPLE_RATE", 16000)
     channels: int = _env_int("VOICE_CHANNELS", 1)
     block_size: int = _env_int("VOICE_BLOCK_SIZE", 1280)
+    # Capture rate of the microphone. Defaults to 48000 Hz (native hardware rate for
+    # USB mics like TI PCM2902/C-Media). 0 = auto fallback.
+    capture_sample_rate: int = _env_int("VOICE_CAPTURE_SAMPLE_RATE", 48000)
     wake_threshold: float = _env_float("VOICE_WAKE_THRESHOLD", 0.45)
-    rms_threshold: float = _env_float("VOICE_RMS_THRESHOLD", 500.0)
+    rms_threshold: float = _env_float("VOICE_RMS_THRESHOLD", 450.0)
     silence_seconds: float = _env_float("VOICE_SILENCE_SECONDS", 1.2)
     min_speech_seconds: float = _env_float("VOICE_MIN_SPEECH_SECONDS", 0.7)
     max_speech_seconds: float = _env_float("VOICE_MAX_SPEECH_SECONDS", 8.0)
@@ -60,9 +66,9 @@ class Settings:
     post_reply_flush_seconds: float = _env_float("VOICE_POST_REPLY_FLUSH_SECONDS", 0.8)
     wake_cooldown_seconds: float = _env_float("VOICE_WAKE_COOLDOWN_SECONDS", 2.5)
     # Energy gate: skip the (expensive) ONNX wake-word inference on near-silent
-    # chunks. A silent chunk can never produce a wake match, and the Pi spends
-    # most of the day in a quiet room — this skips ~all inference while idle.
-    wake_min_rms: float = _env_float("VOICE_WAKE_MIN_RMS", 150.0)
+    # chunks. A silent chunk can never produce a wake match. Normal room noise is
+    # ~270-350 RMS, while voice is >450 RMS.
+    wake_min_rms: float = _env_float("VOICE_WAKE_MIN_RMS", 380.0)
     # Extra quiet time after Alpha finishes replying: the wake word stays
     # ignored so her own voice echo and surrounding chatter cannot re-trigger
     # her right after an answer.
@@ -131,6 +137,7 @@ class RuntimeState:
     last_error: str = ""
     last_event_at: float = 0.0
     running: bool = False
+    rms: float = 0.0
 
 
 class AskRequest(BaseModel):
@@ -169,6 +176,88 @@ Output JSON only with this exact shape:
 """
 
 
+class _Resampler:
+    """Band-limited converter from the microphone's native rate to 16 kHz.
+
+    Most USB microphones capture at 48 kHz (or 44.1 kHz) only, while openWakeWord
+    and Vosk are trained on 16 kHz audio - and PortAudio refuses to open such a
+    device at 16 kHz (paInvalidSampleRate), which leaves the runtime unable to
+    hear anything at all. This converts the captured blocks instead, with a
+    windowed-sinc (Hamming) polyphase bank: for an integer ratio it degenerates
+    into an exact anti-aliased decimation, which is the 48000 -> 16000 path this
+    Pi takes. State is kept between blocks, so the stream stays continuous and
+    no click appears at the block boundaries.
+    """
+
+    def __init__(self, src_rate: int, dst_rate: int, taps: int = 25) -> None:
+        if src_rate <= 0 or dst_rate <= 0:
+            raise ValueError("sample rates must be positive")
+        if src_rate == dst_rate:
+            raise ValueError("source and destination sample rates are equal")
+        if taps < 3 or taps % 2 == 0:
+            raise ValueError("taps must be an odd number >= 3")
+
+        divisor = math.gcd(int(src_rate), int(dst_rate))
+        self._up = int(dst_rate) // divisor
+        self._down = int(src_rate) // divisor
+        # Keep the kernel wide enough to stay a real low-pass when the ratio is
+        # not a simple integer (e.g. 44100 -> 16000). The 48000 -> 16000 path
+        # this Pi takes keeps the short one, so the hot loop stays cheap.
+        taps = max(taps, 4 * self._up)
+        if taps % 2 == 0:
+            taps += 1
+        self._half = taps // 2
+        self._offsets = np.arange(-self._half, self._half + 1, dtype=np.int64)
+
+        # Low-pass at the lower of the two Nyquist limits, in units of the input
+        # sample rate, so nothing above the target band folds back. For
+        # 48000 -> 16000 this is sinc(j/3): an exact decimation kernel.
+        cutoff = 0.5 * min(1.0, float(dst_rate) / float(src_rate))
+        phase = np.arange(self._up, dtype=np.float64) / self._up
+        distance = self._offsets.astype(np.float64)[None, :] - phase[:, None]
+        window = np.where(
+            np.abs(distance) <= self._half,
+            0.54 + 0.46 * np.cos(np.pi * distance / self._half),
+            0.0,
+        )
+        bank = np.sinc(2.0 * cutoff * distance) * window
+        bank /= np.sum(bank, axis=1, keepdims=True)
+        self._bank = bank.astype(np.float32)
+
+        self._buffer = np.zeros(0, dtype=np.float32)
+        self._base = 0  # global input index of self._buffer[0]
+        # Start half a window in, so the first output sample has history on both
+        # sides: no startup transient, at the cost of ~0.8 ms of latency.
+        self._cursor = self._half * self._up  # instant of the next output, in 1/up samples
+
+    def push(self, block: np.ndarray) -> np.ndarray:
+        """Resample one captured block, returning the samples that are ready."""
+        samples = np.asarray(block, dtype=np.float32).reshape(-1)
+        if samples.size:
+            self._buffer = np.concatenate((self._buffer, samples))
+        last = self._base + self._buffer.size - 1
+
+        # Output k sits at input instant (cursor + k*down)/up and needs the
+        # window [instant - half, instant + half] to be inside the buffer.
+        ready = int((self._up * (last - self._half) - self._cursor) // self._down) + 1
+        if ready <= 0:
+            return np.zeros(0, dtype=np.int16)
+
+        instants = self._cursor + self._down * np.arange(ready, dtype=np.int64)
+        starts = instants // self._up
+        phases = instants % self._up
+        indices = (starts[:, None] + self._offsets[None, :]) - self._base
+        values = np.sum(self._buffer[indices] * self._bank[phases], axis=1)
+
+        self._cursor += self._down * ready
+        keep_from = int(self._cursor // self._up) - self._half
+        if keep_from > self._base:
+            self._buffer = self._buffer[keep_from - self._base:]
+            self._base = keep_from
+
+        return np.clip(np.rint(values), -32768, 32767).astype(np.int16)
+
+
 class VoiceAssistantRuntime:
     def __init__(self, settings: Settings):
         self.settings = settings
@@ -176,8 +265,16 @@ class VoiceAssistantRuntime:
         self._state_lock = threading.Lock()
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
+        self._resampler: _Resampler | None = None
+        self._capture_block = settings.block_size
+        self._pending = np.zeros(0, dtype=np.int16)
+        self._audio_queue: queue.Queue[bytes] = queue.Queue(maxsize=150)
+        self._overflow_counter = 0
+        self._decim_kernel = np.array([1, 2, 3, 2, 1], dtype=np.float32) / 9.0
+        self._capture_rate = settings.capture_sample_rate or 48000
         self._model = self._load_wakeword_model()
         self._vosk_model = self._load_vosk_model()
+        self._piper_voice = self._load_piper_voice()
         self._client = httpx.Client(timeout=self.settings.groq_timeout_seconds)
         self._led = LedRingController(settings) if settings.led_enabled else None
 
@@ -227,6 +324,37 @@ class VoiceAssistantRuntime:
             raise FileNotFoundError(f"VOSK model path not found: {model_path}")
         return VoskModel(str(model_path))
 
+    def _load_piper_voice(self) -> Any:
+        if not self.settings.piper_model_path:
+            return None
+        model_path = Path(self.settings.piper_model_path)
+        if not model_path.exists():
+            print(f"Voice backend: Piper model not found at {model_path}")
+            return None
+        try:
+            import piper
+            voice = piper.PiperVoice.load(str(model_path))
+            print(f"Voice backend: preloaded Piper model ({model_path.name}) into memory.")
+            return voice
+        except Exception as exc:
+            print(f"Voice backend: could not preload PiperVoice in memory ({exc}), will use CLI fallback.")
+            return None
+
+    def _flush_audio(self) -> None:
+        """Discard queued mic blocks, clear decimation buffers, and reset wake word features."""
+        while not self._audio_queue.empty():
+            try:
+                self._audio_queue.get_nowait()
+            except queue.Empty:
+                break
+        self._pending = np.zeros(0, dtype=np.int16)
+        self._overflow_counter = 0
+        if hasattr(self._model, "reset"):
+            try:
+                self._model.reset()
+            except Exception:
+                pass
+
     def start(self) -> tuple[bool, str]:
         if self._thread and self._thread.is_alive():
             return False, "Assistant runtime is already running."
@@ -270,28 +398,155 @@ class VoiceAssistantRuntime:
         if state_changed and self._led is not None:
             self._led.set_state(new_state)
 
+    @staticmethod
+    def _find_input_device() -> int | None:
+        try:
+            devices = sd.query_devices()
+            # 1. Prioritize USB capture devices (TI PCM2902, USB PnP, etc.)
+            for idx, dev in enumerate(devices):
+                if dev.get("max_input_channels", 0) > 0:
+                    name = dev.get("name", "").lower()
+                    if any(term in name for term in ("usb", "pnp", "pcm", "audio")):
+                        return idx
+            # 2. Fallback to any device with input channels
+            for idx, dev in enumerate(devices):
+                if dev.get("max_input_channels", 0) > 0:
+                    return idx
+            # 3. PortAudio default device
+            default_in = sd.default.device[0]
+            return default_in if default_in >= 0 else None
+        except Exception:
+            return None
+
+    def _audio_callback(self, indata, frames, time_info, status) -> None:
+        if status.input_overflow:
+            self._overflow_counter += 1
+        try:
+            self._audio_queue.put_nowait(bytes(indata))
+        except queue.Full:
+            try:
+                self._audio_queue.get_nowait()
+            except queue.Empty:
+                pass
+            try:
+                self._audio_queue.put_nowait(bytes(indata))
+            except queue.Full:
+                pass
+
+    def _open_input_stream(self) -> sd.RawInputStream:
+        """Open the microphone for capture with auto-retry and callback delivery."""
+        dev_idx = self._find_input_device()
+        rate = self.settings.capture_sample_rate or 48000
+        # blocksize is scaled proportional to the capture rate (80 ms)
+        block = int(round(self.settings.block_size * rate / self.settings.sample_rate))
+        self._capture_rate = rate
+        self._capture_block = block
+        self._overflow_counter = 0
+
+        # Drain queue leftovers
+        while not self._audio_queue.empty():
+            try:
+                self._audio_queue.get_nowait()
+            except queue.Empty:
+                break
+
+        last_exc: Exception | None = None
+        for attempt in range(5):
+            if self._stop_event.is_set():
+                raise RuntimeError("Runtime stopped during stream initialization")
+            try:
+                kwargs: dict[str, Any] = {
+                    "samplerate": rate,
+                    "blocksize": block,
+                    "channels": self.settings.channels,
+                    "dtype": "int16",
+                    "latency": 0.2,
+                    "callback": self._audio_callback,
+                }
+                if dev_idx is not None:
+                    kwargs["device"] = dev_idx
+                stream = sd.RawInputStream(**kwargs)
+                print(f"Voice backend: capturing at {rate} Hz (blocksize={block}, device={dev_idx}, latency=0.2).")
+                return stream
+            except Exception as exc:
+                last_exc = exc
+                print(f"Voice backend: audio open attempt {attempt + 1}/5 failed ({exc}). Retrying in 1s...")
+                time.sleep(1.0)
+                dev_idx = self._find_input_device()
+
+        # Fallback to direct default stream if 48k device failed
+        if rate != self.settings.sample_rate:
+            try:
+                stream = sd.RawInputStream(
+                    samplerate=self.settings.sample_rate,
+                    blocksize=self.settings.block_size,
+                    channels=self.settings.channels,
+                    dtype="int16",
+                    latency=0.2,
+                    callback=self._audio_callback,
+                )
+                self._capture_rate = self.settings.sample_rate
+                self._capture_block = self.settings.block_size
+                print(f"Voice backend: fell back to direct {self.settings.sample_rate} Hz stream.")
+                return stream
+            except Exception:
+                pass
+
+        if last_exc:
+            raise last_exc
+        raise RuntimeError("Failed to open audio input stream")
+
+    def _read_chunk(self) -> tuple[bytes, bool]:
+        """Read exactly one 16 kHz block (1280 samples) converted from capture stream."""
+        overflowed = self._overflow_counter > 0
+        self._overflow_counter = 0
+
+        data = None
+        while not self._stop_event.is_set():
+            try:
+                data = self._audio_queue.get(timeout=0.1)
+                break
+            except queue.Empty:
+                continue
+
+        if data is None or not data:
+            return b"", False
+
+        raw = np.frombuffer(data, dtype=np.int16)
+        if self._capture_rate == 48000:
+            # High-performance 3:1 anti-aliasing decimation (48k -> 16k in ~0.16 ms)
+            f = raw.astype(np.float32)
+            filtered = np.convolve(f, self._decim_kernel, mode="same")[::3]
+            chunk = np.clip(np.rint(filtered), -32768, 32767).astype(np.int16)
+            return chunk.tobytes(), overflowed
+        elif self._capture_rate == self.settings.sample_rate:
+            return bytes(data), overflowed
+        else:
+            # Fallback resampler for arbitrary sample rates
+            if self._resampler is None:
+                self._resampler = _Resampler(self._capture_rate, self.settings.sample_rate)
+            converted = self._resampler.push(raw)
+            if converted.size:
+                self._pending = np.concatenate((self._pending, converted))
+            if self._pending.size >= self.settings.block_size:
+                chunk = self._pending[: self.settings.block_size]
+                self._pending = self._pending[self.settings.block_size:]
+                return chunk.tobytes(), overflowed
+            return b"", overflowed
+
     def _run_loop(self) -> None:
-        # Monotonic deadline before which the wake word is ignored. Covers the
-        # post-wake cooldown and a longer quiet period after Alpha replies so
-        # her own voice echo / room chatter cannot re-trigger her.
         cooldown_until = 0.0
         prev_wake_above = False
         try:
-            with sd.RawInputStream(
-                samplerate=self.settings.sample_rate,
-                blocksize=self.settings.block_size,
-                channels=self.settings.channels,
-                dtype="int16",
-            ) as stream:
+            with self._open_input_stream():
                 while not self._stop_event.is_set():
-                    chunk, overflowed = stream.read(self.settings.block_size)
+                    chunk, overflowed = self._read_chunk()
+                    if not chunk:
+                        continue
                     if overflowed:
-                        self._set_state(AssistantState.error, last_error="Audio overflow on input stream.")
+                        self._set_state(AssistantState.idle, last_error="Audio overflow on input stream.")
                     audio_np = np.frombuffer(chunk, dtype=np.int16)
 
-                    # Energy gate: skip the ONNX inference on near-silent chunks
-                    # (the model cannot fire on silence). Speech/room noise
-                    # always passes the gate, so wake detection is unaffected.
                     rms = (float(np.sqrt(np.mean(np.square(audio_np.astype(np.float32)))))
                            if audio_np.size else 0.0)
                     if rms >= self.settings.wake_min_rms:
@@ -300,42 +555,53 @@ class VoiceAssistantRuntime:
                             AssistantState.idle,
                             wake_word_score=score_value,
                             wake_word_model=score_name,
+                            rms=round(rms, 1),
                         )
                     else:
                         score_value = 0.0
+                        if int(now * 2) != int((now - 0.08) * 2):
+                            self._set_state(
+                                AssistantState.idle,
+                                wake_word_score=0.0,
+                                rms=round(rms, 1),
+                            )
 
                     now = time.monotonic()
                     above = score_value >= self.settings.wake_threshold
-                    # Require two consecutive above-threshold chunks: a single
-                    # spurious spike must never wake the assistant.
-                    if above and prev_wake_above and now >= cooldown_until:
+                    moderate = score_value >= (self.settings.wake_threshold * 0.75)
+                    can_wake = (above or (moderate and prev_wake_above)) and now >= cooldown_until
+
+                    if can_wake:
                         cooldown_until = now + self.settings.wake_cooldown_seconds
                         prev_wake_above = False
-                        frames = self._capture_utterance(stream, bytes(chunk))
+                        frames = self._capture_utterance(bytes(chunk))
                         transcript = self._transcribe(frames)
                         if transcript:
                             try:
                                 self._process_text(transcript)
-                                # Discard buffered audio (incl. TTS echo) so the
-                                # assistant does not listen to its own voice.
-                                self._drain_audio(stream, self.settings.post_reply_flush_seconds)
-                                # Stay quiet after replying: keep the wake word
-                                # ignored while the room settles / people chat.
+                                self._flush_audio()
+                                self._drain_audio(self.settings.post_reply_flush_seconds)
                                 cooldown_until = max(
                                     cooldown_until,
                                     time.monotonic() + self.settings.post_reply_quiet_seconds,
                                 )
                             except Exception as exc:
                                 self._set_state(AssistantState.error, last_error=f"Processing error: {exc}")
+                        else:
+                            self._set_state(AssistantState.idle, last_transcript="")
+                            self._flush_audio()
                     else:
-                        prev_wake_above = above
+                        prev_wake_above = moderate
         except Exception as exc:
             self._set_state(AssistantState.error, running=False, last_error=str(exc))
 
-    def _drain_audio(self, stream: sd.RawInputStream, seconds: float) -> None:
+    def _drain_audio(self, seconds: float) -> None:
         deadline = time.monotonic() + seconds
         while not self._stop_event.is_set() and time.monotonic() < deadline:
-            stream.read(self.settings.block_size)
+            try:
+                self._audio_queue.get(timeout=0.05)
+            except queue.Empty:
+                pass
 
     def _wakeword_score(self, audio_np: np.ndarray) -> tuple[str, float]:
         prediction = self._model.predict(audio_np)
@@ -360,7 +626,7 @@ class VoiceAssistantRuntime:
             return float(value.flatten()[-1])
         return 0.0
 
-    def _capture_utterance(self, stream: sd.RawInputStream, first_chunk: bytes) -> list[bytes]:
+    def _capture_utterance(self, first_chunk: bytes) -> list[bytes]:
         self._set_state(AssistantState.listening)
         frames: list[bytes] = [bytes(first_chunk)]
         started = False
@@ -369,7 +635,7 @@ class VoiceAssistantRuntime:
         silence_limit = self.settings.silence_seconds
 
         while not self._stop_event.is_set():
-            chunk, _overflowed = stream.read(self.settings.block_size)
+            chunk, _overflowed = self._read_chunk()
             chunk_bytes = bytes(chunk)
             frames.append(chunk_bytes)
             samples = np.frombuffer(chunk_bytes, dtype=np.int16)
@@ -534,30 +800,25 @@ class VoiceAssistantRuntime:
         except Exception:
             return "No pude ejecutar el control de Spotify."
 
+    def _play_wav(self, wav_path: str) -> bool:
+        play_candidates: list[list[str]] = []
+        if self.settings.piper_play_command:
+            play_candidates.append(shlex.split(self.settings.piper_play_command) + [wav_path])
+        play_candidates.append(["pw-play", wav_path])
+        play_candidates.append(["aplay", "-q", wav_path])
+
+        for cmd in play_candidates:
+            if shutil.which(cmd[0]):
+                try:
+                    res = subprocess.run(cmd, capture_output=True, timeout=30)
+                    if res.returncode == 0:
+                        return True
+                except Exception:
+                    continue
+        return False
+
     def _speak(self, text: str) -> None:
         if not text.strip():
-            return
-
-        # Prefer a direct file match (covers absolute and backend-relative
-        # paths) before falling back to PATH lookup for a bare command name.
-        piper_bin_path = None
-        if self.settings.piper_bin:
-            candidate = Path(self.settings.piper_bin)
-            if candidate.is_file():
-                piper_bin_path = str(candidate)
-            else:
-                piper_bin_path = shutil.which(self.settings.piper_bin)
-        if piper_bin_path is None:
-            self._speak_with_espeak(text)
-            return
-
-        if not self.settings.piper_model_path:
-            self._set_state(AssistantState.error, last_error="PIPER_MODEL_PATH is missing.")
-            return
-
-        model_path = Path(self.settings.piper_model_path)
-        if not model_path.exists():
-            self._set_state(AssistantState.error, last_error=f"Piper model not found: {model_path}")
             return
 
         self._set_state(AssistantState.speaking)
@@ -565,12 +826,43 @@ class VoiceAssistantRuntime:
         os.close(fd)
 
         try:
-            piper_cmd = [piper_bin_path, "--model", str(model_path), "--output_file", wav_path]
-            subprocess.run(piper_cmd, input=text.encode("utf-8"), check=True, capture_output=True)
+            synth_ok = False
+            # 1. High-performance in-memory Piper synthesis (preloaded model)
+            if self._piper_voice is not None:
+                try:
+                    with wave.open(wav_path, "wb") as wav_file:
+                        self._piper_voice.synthesize_wav(text, wav_file)
+                    synth_ok = True
+                except Exception as exc:
+                    print(f"Voice backend: in-memory Piper synthesis error ({exc}), trying CLI")
 
-            play_cmd = shlex.split(self.settings.piper_play_command) + [wav_path]
-            subprocess.run(play_cmd, check=True, capture_output=True)
-        except Exception:
+            # 2. Fallback to CLI piper invocation
+            if not synth_ok:
+                piper_bin_path = None
+                if self.settings.piper_bin:
+                    candidate = Path(self.settings.piper_bin)
+                    if candidate.is_file():
+                        piper_bin_path = str(candidate)
+                    else:
+                        piper_bin_path = shutil.which(self.settings.piper_bin)
+
+                if piper_bin_path and self.settings.piper_model_path:
+                    model_path = Path(self.settings.piper_model_path)
+                    if model_path.exists():
+                        piper_cmd = [piper_bin_path, "--model", str(model_path), "--output_file", wav_path]
+                        res = subprocess.run(piper_cmd, input=text.encode("utf-8"), capture_output=True)
+                        if res.returncode == 0:
+                            synth_ok = True
+
+            # 3. Audio playback (PipeWire / ALSA)
+            played = False
+            if synth_ok and Path(wav_path).exists() and Path(wav_path).stat().st_size > 44:
+                played = self._play_wav(wav_path)
+
+            if not played:
+                self._speak_with_espeak(text)
+        except Exception as exc:
+            print(f"Voice backend: TTS error ({exc}), falling back to espeak")
             self._speak_with_espeak(text)
         finally:
             try:
@@ -579,7 +871,17 @@ class VoiceAssistantRuntime:
                 pass
 
     def _speak_with_espeak(self, text: str) -> None:
+        fd, wav_path = tempfile.mkstemp(prefix="alpha-espeak-", suffix=".wav")
+        os.close(fd)
         try:
+            res = subprocess.run(
+                ["espeak-ng", "-v", "es", "-s", "145", "-w", wav_path, text],
+                capture_output=True,
+            )
+            if res.returncode == 0 and Path(wav_path).exists() and Path(wav_path).stat().st_size > 44:
+                if self._play_wav(wav_path):
+                    return
+
             subprocess.run(
                 ["espeak-ng", "-v", "es", "-s", "145", text],
                 check=True,
@@ -587,6 +889,11 @@ class VoiceAssistantRuntime:
             )
         except Exception as exc:
             self._set_state(AssistantState.error, last_error=f"TTS failed: {exc}")
+        finally:
+            try:
+                Path(wav_path).unlink(missing_ok=True)
+            except Exception:
+                pass
 
 
 class LedRingController:

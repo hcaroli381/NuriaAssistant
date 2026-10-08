@@ -2154,23 +2154,19 @@ public class AssistantController {
     }
 
     private void startOrbBreathing() {
-        // Never animate an invisible orb: the breathing timeline would keep
-        // pulsing the FX clock 24/7 while Spotify hides the
-        // voice overlay. Restart paths re-enter with the overlay visible.
-        if (voiceOverlayLayer == null || !voiceOverlayLayer.isVisible()) {
-            return;
-        }
-        if (orbBreathing.getStatus() != Animation.Status.RUNNING) {
-            orbBreathing.playFrom(Duration.ZERO);
-        }
+        // Continuous 60fps scaling animations in JavaFX trigger endless software rasterization
+        // and Xwayland repainting, pinning CPU at 100% on the Raspberry Pi. Keep the orb static when idle.
+        stopOrbBreathing();
     }
 
     private void stopOrbBreathing() {
-        if (orbBreathing.getStatus() == Animation.Status.RUNNING) {
+        if (orbBreathing != null && orbBreathing.getStatus() == Animation.Status.RUNNING) {
             orbBreathing.stop();
         }
-        voiceOrb.setScaleX(1.0);
-        voiceOrb.setScaleY(1.0);
+        if (voiceOrb != null) {
+            voiceOrb.setScaleX(1.0);
+            voiceOrb.setScaleY(1.0);
+        }
     }
 
     private void startThinkingDots() {
