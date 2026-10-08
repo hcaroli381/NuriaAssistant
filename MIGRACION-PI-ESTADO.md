@@ -117,21 +117,12 @@ ficheros de su equipo y necesita su visto bueno.
 
 ### 2. Cursor de ratón visible en pantalla táctil (Kiosk Mode)
 - **Causa raíz**:
-  - `styles.css` tenía 22 declaraciones explícitas con `-fx-cursor: hand;` en botones, iconos y tarjetas.
-  - Al tocar la pantalla, JavaFX sobreescribía `scene.setCursor(Cursor.NONE)` con `Cursor.HAND`, dejando el puntero visible.
-- **Solución**:
-  - Se creó `src/main/resources/com/example/nuriaassistant/kiosk.css` con:
-    ```css
-    * {
-        -fx-cursor: none !important;
-    }
-    ```
-  - En `AssistantApplication.java`, cuando `kiosk == true`, se inyecta `kiosk.css` en la escena.
-  - A nivel de SO / Wayland, se instaló `unclutter-xfixes` y se configuró en `~/.config/labwc/autostart`:
-    ```bash
-    unclutter --timeout 0 --fork --start-hidden --hide-on-touch
-    ```
-  - El puntero queda total y permanentemente invisible.
+  - El compositor Wayland (`labwc`) y las aplicaciones leían la propiedad de GNOME/GTK `org.gnome.desktop.interface cursor-theme`, configurada en `'PiXtrix'` por defecto.
+  - Al tocar la pantalla, la emulación de eventos de ratón renderizaba los glifos visibles de `/usr/share/icons/PiXtrix/cursors/`.
+- **Solución implementada**:
+  - Se configuró `gsettings set org.gnome.desktop.interface cursor-theme 'blank'`.
+  - Se crearon archivos de configuración de GTK (`~/.config/gtk-3.0/settings.ini`).
+  - A nivel de sistema de archivos, se enlazaron `/usr/share/icons/PiXtrix/cursors` y `/usr/share/icons/Adwaita/cursors` al tema invisible `/usr/share/icons/blank/cursors` (dejando copias de seguridad `.orig`), haciendo imposible que cualquier proceso del sistema cargue un cursor visible.
 
 ## Problemas resueltos (Sesión 08/10/2026 15:40) — Síntesis de Voz en Memoria, Activación Wake Word, undervoltage y Bucle "Pensando"
 
